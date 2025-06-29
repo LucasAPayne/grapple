@@ -14,16 +14,21 @@ typedef struct
 } Window;
 
 // NOTE(lucas): Only call after functions whose errors can be retrieved via GetLastError, not those that return HRESULT.
-internal void win32_error_callback(void)
-{
-    DWORD error = GetLastError();
-    char msg[512];
-    char full_buf[1024];
-    FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, error,
-                   MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), msg, 0, NULL);
-    StringCchPrintfA(full_buf, sizeof(full_buf), "Win32 call failed near %s:%d\n\nMessage: %s", __FILE__, __LINE__, msg);
-    MessageBoxA(NULL, full_buf, TEXT("Error"), MB_ICONERROR);
-}
+#ifdef GRAPPLE_DEBUG
+    #define win32_error_callback() do                                                                           \
+    {                                                                                                           \
+        DWORD win32_err = GetLastError();                                                                       \
+        char win32_msg[512] = "Unknown error";                                                                  \
+        char win32_full_buf[1024];                                                                              \
+        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, win32_err,             \
+                    MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), win32_msg, 0, NULL);                             \
+        StringCchPrintfA(win32_full_buf, sizeof(win32_full_buf), "Win32 call failed near %s:%d\n\nMessage: %s", \
+                        __FILE__, __LINE__, win32_msg);                                                         \
+        MessageBoxA(NULL, win32_full_buf, TEXT("Error"), MB_ICONERROR);                                         \
+    } while(0)
+#else
+    #define win32_error_callback() ((void)0);
+#endif
 
 internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
@@ -48,7 +53,6 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
         */
         case WM_DESTROY:
         {
-            // TODO(lucas): Handle this with a message to the user?
             Window* window = (Window*)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
             if (window)
                 window->open = false;

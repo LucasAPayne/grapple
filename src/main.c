@@ -1,42 +1,61 @@
+#include "math.h"
 #include "types.h"
 #include "window.c"
+
+#include "shaders/compiled/d3d11_pshader.h"
+#include "shaders/compiled/d3d11_vshader.h"
 
 #include <windows.h>
 #include <crtdbg.h>
 #include <d3d11.h>
 
-#define com_release(obj) if(obj){obj->lpVtbl->Release(obj); obj = 0;}
+#define com_release(obj) do                      \
+{                                                \
+    if(obj){obj->lpVtbl->Release(obj); obj = 0;} \
+} while(0)
 
 #ifdef GRAPPLE_DEBUG
-	#ifndef HR
-	#define HR(x) do                                                                                                 \
-	{                                                                                                                \
-		HRESULT hr__ = (x);                                                                                          \
-		if(FAILED(hr__))                                                                                             \
-		{                                                                                                            \
-            char hr_msg__[512];                                                                                      \
-            char hr_buf__[1024];                                                                                     \
-            FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr__, 0, hr_msg__,      \
-                           sizeof(hr_msg__), NULL);                                                                  \
-            StringCchPrintfA(hr_buf__, sizeof(hr_buf__), "D3D call failed at %s:%d, HRESULT: 0x%08X\n\nMessage: %s", \
-                             __FILE__, __LINE__, hr__, hr_msg__);                                                    \
-			MessageBoxA(NULL, hr_buf__, "Direct3D Error", MB_OK | MB_ICONERROR);                                     \
-            ExitProcess(1);                                                                                          \
-		}                                                                                                            \
+	#define HR(x) do                                                                                             \
+	{                                                                                                            \
+		HRESULT hr_hr = (x);                                                                                     \
+		if(FAILED(hr_hr))                                                                                        \
+		{                                                                                                        \
+            char hr_msg[512] = "Unknown error";                                                                  \
+            char hr_buf[1024];                                                                                   \
+            FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr_hr, 0, hr_msg,   \
+                           sizeof(hr_msg), NULL);                                                                \
+            StringCchPrintfA(hr_buf, sizeof(hr_buf), "D3D call failed at %s:%d, HRESULT: 0x%08X\n\nMessage: %s", \
+                             __FILE__, __LINE__, hr_hr, hr_msg);                                                 \
+			MessageBoxA(NULL, hr_buf, "Direct3D Error", MB_OK | MB_ICONERROR);                                   \
+            ExitProcess(1);                                                                                      \
+		}                                                                                                        \
 	} while(0)
-	#endif
 #else
-	#ifndef HR
 	#define HR(x) (x)
-	#endif
 #endif
+
+typedef struct
+{
+    v2 pos;
+    v4 color;
+} Vertex;
 
 global IDXGISwapChain* swap_chain;
 global ID3D11Device* device;
 global ID3D11DeviceContext* immediate_context;
 global ID3D11RenderTargetView* render_target_view;
+global ID3D11PixelShader* pixel_shader;
+global ID3D11VertexShader* vertex_shader;
+global ID3D11InputLayout* input_layout;
+global ID3D11Buffer* vertex_buffer;
 
-void init_d3d11(Window* window)
+internal inline v4 color_red(void)    {return (v4){1.0f, 0.0f, 0.0f, 1.0f};}
+internal inline v4 color_green(void)  {return (v4){0.0f, 1.0f, 0.0f, 1.0f};}
+internal inline v4 color_blue(void)   {return (v4){0.0f, 0.0f, 1.0f, 1.0f};}
+internal inline v4 color_black(void)  {return (v4){0.0f, 0.0f, 0.0f, 1.0f};}
+internal inline v4 color_white(void)  {return (v4){1.0f, 1.0f, 1.0f, 1.0f};}
+
+internal void init_d3d11(Window* window)
 {
     D3D_FEATURE_LEVEL feature_level;
 
@@ -54,10 +73,12 @@ void init_d3d11(Window* window)
         ExitProcess(1);
     }
 
+    // TODO(lucas): V-Sync
+    // TODO(lucas): SRGB gamma correction
     DXGI_SWAP_CHAIN_DESC sd = {0};
     sd.BufferDesc.Width = window->width;
     sd.BufferDesc.Height = window->height;
-    sd.BufferDesc.RefreshRate.Numerator = 60;
+    sd.BufferDesc.RefreshRate.Numerator = 0;
     sd.BufferDesc.RefreshRate.Denominator = 1;
     sd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
     sd.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
@@ -72,7 +93,6 @@ void init_d3d11(Window* window)
     sd.OutputWindow = (HWND)window->ptr;
     sd.Windowed = TRUE;
     sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    sd.Flags = DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT;
 
     // Get the IDXGI_Factory used to create the device before creating swap chain
     IDXGIDevice* dxgi_device = 0;
@@ -88,7 +108,7 @@ void init_d3d11(Window* window)
 
     ID3D11Texture2D* back_buffer = 0;
     HR(swap_chain->lpVtbl->GetBuffer(swap_chain, 0, &IID_ID3D11Texture2D, (void**)(&back_buffer)));
-    HR(device->lpVtbl->CreateRenderTargetView(device, (ID3D11Resource*)back_buffer, 0, &render_target_view));
+    HR(device->lpVtbl->CreateRenderTargetView(device, (ID3D11Resource*)back_buffer, NULL, &render_target_view));
     com_release(back_buffer);
     immediate_context->lpVtbl->OMSetRenderTargets(immediate_context, 1, &render_target_view, NULL);
 
@@ -100,6 +120,42 @@ void init_d3d11(Window* window)
     vp.MinDepth = 0.0f;
     vp.MaxDepth = 1.0f;
     immediate_context->lpVtbl->RSSetViewports(immediate_context, 1, &vp);
+
+    HR(device->lpVtbl->CreateVertexShader(device, d3d11_vshader, sizeof(d3d11_vshader), NULL, &vertex_shader));
+    HR(device->lpVtbl->CreatePixelShader(device, d3d11_pshader, sizeof(d3d11_pshader), NULL, &pixel_shader));
+    immediate_context->lpVtbl->VSSetShader(immediate_context, vertex_shader, NULL, 0);
+    immediate_context->lpVtbl->PSSetShader(immediate_context, pixel_shader, NULL, 0);
+
+    D3D11_INPUT_ELEMENT_DESC layout[] =
+    {
+        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex, pos),   D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex, color), D3D11_INPUT_PER_VERTEX_DATA, 0}
+    };
+    HR(device->lpVtbl->CreateInputLayout(device, layout, countof(layout), d3d11_vshader, sizeof(d3d11_vshader),
+       &input_layout));
+    immediate_context->lpVtbl->IASetInputLayout(immediate_context, input_layout);
+
+    Vertex verts[] =
+    {
+        { v2( 0.0f,  0.5f), color_red() },
+        { v2( 0.5f, -0.5f), color_green() },
+        { v2(-0.5f, -0.5f), color_blue() },
+    };
+
+    D3D11_BUFFER_DESC vb_desc = {0};
+    vb_desc.ByteWidth = sizeof(verts);
+    vb_desc.Usage = D3D11_USAGE_IMMUTABLE;
+    vb_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+
+    D3D11_SUBRESOURCE_DATA vinit_data = {0};
+    vinit_data.pSysMem = verts;
+
+    HR(device->lpVtbl->CreateBuffer(device, &vb_desc, &vinit_data, &vertex_buffer));
+
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    immediate_context->lpVtbl->IASetVertexBuffers(immediate_context, 0, 1, &vertex_buffer, &stride, &offset);
+    immediate_context->lpVtbl->IASetPrimitiveTopology(immediate_context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 }
 
 void release_d3d11()
@@ -108,6 +164,10 @@ void release_d3d11()
     com_release(immediate_context);
     com_release(swap_chain);
     com_release(render_target_view);
+    com_release(pixel_shader);
+    com_release(vertex_shader);
+    com_release(input_layout);
+    com_release(vertex_buffer);
 }
 
 int main()
@@ -140,9 +200,19 @@ int main()
         if (!window->open)
             break;
 
-        immediate_context->lpVtbl->ClearRenderTargetView(immediate_context, render_target_view,
-                                                         (float[4]){0.0f, 0.0f, 0.0f, 0.0f});
-        swap_chain->lpVtbl->Present(swap_chain, 0, 0);
+        immediate_context->lpVtbl->OMSetRenderTargets(immediate_context, 1, &render_target_view, NULL);
+        immediate_context->lpVtbl->ClearRenderTargetView(immediate_context, render_target_view, color_black().e);
+
+        UINT stride = sizeof(Vertex);
+        UINT offset = 0;
+        immediate_context->lpVtbl->IASetInputLayout(immediate_context, input_layout);
+        immediate_context->lpVtbl->IASetVertexBuffers(immediate_context, 0, 1, &vertex_buffer, &stride, &offset);
+        immediate_context->lpVtbl->IASetPrimitiveTopology(immediate_context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        immediate_context->lpVtbl->VSSetShader(immediate_context, vertex_shader, NULL, 0);
+        immediate_context->lpVtbl->PSSetShader(immediate_context, pixel_shader, NULL, 0);
+        immediate_context->lpVtbl->Draw(immediate_context, 3, 0);
+
+        HR(swap_chain->lpVtbl->Present(swap_chain, 1, 0));
     }
 
     release_d3d11();
