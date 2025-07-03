@@ -23,6 +23,5 @@ PSInput vs(VSInput input)
 
 float4 ps(PSInput input) : SV_Target
 {
-    float3 pixel_col = tex.Sample(tex_sampler, input.tex_coord).rgb;
-    return float4(pixel_col, 1.0f);
+    return tex.Sample(tex_sampler, input.tex_coord);
 }

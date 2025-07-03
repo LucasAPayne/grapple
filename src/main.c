@@ -52,6 +52,7 @@ global ID3D11Buffer* vertex_buffer;
 global ID3D11Buffer* index_buffer;
 global ID3D11SamplerState* sampler_state;
 global ID3D11ShaderResourceView* texture_view;
+global ID3D11BlendState* blend_state;
 
 internal inline v4 color_red(void)    {return (v4){1.0f, 0.0f, 0.0f, 1.0f};}
 internal inline v4 color_green(void)  {return (v4){0.0f, 1.0f, 0.0f, 1.0f};}
@@ -175,7 +176,7 @@ internal void init_d3d11(Window* window)
     immediate_context->lpVtbl->IASetIndexBuffer(immediate_context, index_buffer, DXGI_FORMAT_R16_UINT, 0);
 
     D3D11_SAMPLER_DESC sampler_desc = {0};
-    sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
     sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
     sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
     sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
@@ -183,19 +184,34 @@ internal void init_d3d11(Window* window)
     sampler_desc.MaxLOD = D3D11_FLOAT32_MAX;
     HR(device->lpVtbl->CreateSamplerState(device, &sampler_desc, &sampler_state));
 
+    D3D11_BLEND_DESC transparent_desc = {0};
+    transparent_desc.AlphaToCoverageEnable = FALSE;
+    transparent_desc.IndependentBlendEnable = FALSE;
+    transparent_desc.RenderTarget[0].BlendEnable = TRUE;
+    transparent_desc.RenderTarget[0].SrcBlend              = D3D11_BLEND_SRC_ALPHA;
+    transparent_desc.RenderTarget[0].DestBlend             = D3D11_BLEND_INV_SRC_ALPHA;
+    transparent_desc.RenderTarget[0].BlendOp               = D3D11_BLEND_OP_ADD;
+    transparent_desc.RenderTarget[0].SrcBlendAlpha         = D3D11_BLEND_SRC_ALPHA;
+    transparent_desc.RenderTarget[0].DestBlendAlpha        = D3D11_BLEND_INV_SRC_ALPHA;
+    transparent_desc.RenderTarget[0].BlendOpAlpha          = D3D11_BLEND_OP_ADD;
+    transparent_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
+    HR(device->lpVtbl->CreateBlendState(device, &transparent_desc, &blend_state));
 }
 
 void release_d3d11()
 {
+    com_release(swap_chain);
     com_release(device);
     com_release(immediate_context);
-    com_release(swap_chain);
     com_release(render_target_view);
     com_release(pixel_shader);
     com_release(vertex_shader);
     com_release(input_layout);
     com_release(vertex_buffer);
     com_release(index_buffer);
+    com_release(sampler_state);
+    com_release(texture_view);
+    com_release(blend_state);
 }
 
 int main(void)
@@ -270,6 +286,8 @@ int main(void)
         immediate_context->lpVtbl->PSSetShaderResources(immediate_context, 0, 1, &texture_view);
         immediate_context->lpVtbl->VSSetShader(immediate_context, vertex_shader, NULL, 0);
         immediate_context->lpVtbl->PSSetShader(immediate_context, pixel_shader, NULL, 0);
+        immediate_context->lpVtbl->OMSetBlendState(immediate_context, blend_state, NULL, 0xffffffff);
+
         immediate_context->lpVtbl->DrawIndexed(immediate_context, 6, 0, 0);
 
         HR(swap_chain->lpVtbl->Present(swap_chain, 1, 0));
