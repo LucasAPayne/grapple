@@ -19,7 +19,7 @@ set common_defs=/D_CRT_SECURE_NO_WARNINGS /DVC_EXTRALEAN /DWIN32_LEAN_AND_MEAN /
 @rem /Zi generates a PDB
 @rem /Od disables optimization
 @rem /MTd uses the debug multithreaded C library
-set debug_flags=/DGRAPPLE_DEBUG /Zi /Od /MTd /fsanitize=address
+set debug_flags=/DGRAPPLE_DEBUG /Zi /Od /MTd
 set release_flags=/O2
 
 set linker_flags=/link /opt:ref /incremental:no /subsystem:windows /entry:mainCRTStartup

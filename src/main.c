@@ -1,4 +1,5 @@
 #include "math.h"
+#include "texture.c"
 #include "types.h"
 #include "window.c"
 
@@ -37,7 +38,7 @@
 typedef struct
 {
     v2 pos;
-    v4 color;
+    v2 tex_coord;
 } Vertex;
 
 global IDXGISwapChain* swap_chain;
@@ -48,6 +49,9 @@ global ID3D11PixelShader* pixel_shader;
 global ID3D11VertexShader* vertex_shader;
 global ID3D11InputLayout* input_layout;
 global ID3D11Buffer* vertex_buffer;
+global ID3D11Buffer* index_buffer;
+global ID3D11SamplerState* sampler_state;
+global ID3D11ShaderResourceView* texture_view;
 
 internal inline v4 color_red(void)    {return (v4){1.0f, 0.0f, 0.0f, 1.0f};}
 internal inline v4 color_green(void)  {return (v4){0.0f, 1.0f, 0.0f, 1.0f};}
@@ -123,23 +127,29 @@ internal void init_d3d11(Window* window)
 
     HR(device->lpVtbl->CreateVertexShader(device, d3d11_vshader, sizeof(d3d11_vshader), NULL, &vertex_shader));
     HR(device->lpVtbl->CreatePixelShader(device, d3d11_pshader, sizeof(d3d11_pshader), NULL, &pixel_shader));
-    immediate_context->lpVtbl->VSSetShader(immediate_context, vertex_shader, NULL, 0);
-    immediate_context->lpVtbl->PSSetShader(immediate_context, pixel_shader, NULL, 0);
 
     D3D11_INPUT_ELEMENT_DESC layout[] =
     {
-        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex, pos),   D3D11_INPUT_PER_VERTEX_DATA, 0},
-        {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex, color), D3D11_INPUT_PER_VERTEX_DATA, 0}
+        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Vertex, pos),       D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TEXCOORD",  0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Vertex, tex_coord), D3D11_INPUT_PER_VERTEX_DATA, 0}
     };
     HR(device->lpVtbl->CreateInputLayout(device, layout, countof(layout), d3d11_vshader, sizeof(d3d11_vshader),
        &input_layout));
-    immediate_context->lpVtbl->IASetInputLayout(immediate_context, input_layout);
 
+    // TODO(lucas): Because I'm using BMPs, which are normally stored bottom-up, I have flipped the texture coordinates.
+    // Re-evaluate this decision later.
     Vertex verts[] =
     {
-        { v2( 0.0f,  0.5f), color_red() },
-        { v2( 0.5f, -0.5f), color_green() },
-        { v2(-0.5f, -0.5f), color_blue() },
+        { v2(-0.5f,  0.5f), v2(0.0f, 1.0f) },
+        { v2( 0.5f,  0.5f), v2(1.0f, 1.0f) },
+        { v2( 0.5f, -0.5f), v2(1.0f, 0.0f) },
+        { v2(-0.5f, -0.5f), v2(0.0f, 0.0f) },
+    };
+
+    u16 indices[] =
+    {
+        0, 1, 2,
+        0, 2, 3
     };
 
     D3D11_BUFFER_DESC vb_desc = {0};
@@ -152,10 +162,27 @@ internal void init_d3d11(Window* window)
 
     HR(device->lpVtbl->CreateBuffer(device, &vb_desc, &vinit_data, &vertex_buffer));
 
-    UINT stride = sizeof(Vertex);
-    UINT offset = 0;
-    immediate_context->lpVtbl->IASetVertexBuffers(immediate_context, 0, 1, &vertex_buffer, &stride, &offset);
-    immediate_context->lpVtbl->IASetPrimitiveTopology(immediate_context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    D3D11_BUFFER_DESC ib_desc = {0};
+    ib_desc.Usage = D3D11_USAGE_IMMUTABLE;
+    ib_desc.ByteWidth = sizeof(indices);
+    ib_desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+
+    D3D11_SUBRESOURCE_DATA iinit_data = {0};
+    iinit_data.pSysMem = indices;
+
+    HR(device->lpVtbl->CreateBuffer(device, &ib_desc, &iinit_data, &index_buffer));
+
+    immediate_context->lpVtbl->IASetIndexBuffer(immediate_context, index_buffer, DXGI_FORMAT_R16_UINT, 0);
+
+    D3D11_SAMPLER_DESC sampler_desc = {0};
+    sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
+    sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
+    sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    sampler_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+    sampler_desc.MaxLOD = D3D11_FLOAT32_MAX;
+    HR(device->lpVtbl->CreateSamplerState(device, &sampler_desc, &sampler_state));
+
 }
 
 void release_d3d11()
@@ -168,9 +195,10 @@ void release_d3d11()
     com_release(vertex_shader);
     com_release(input_layout);
     com_release(vertex_buffer);
+    com_release(index_buffer);
 }
 
-int main()
+int main(void)
 {
 #ifdef GRAPPLE_DEBUG
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
@@ -181,6 +209,35 @@ int main()
 
     ASSERT(immediate_context, "D3D immediate context is null");
     ASSERT(swap_chain, "D3D swap chain is null");
+
+    Arena arena = arena_alloc(MEGABYTES(10));
+    Texture texture = load_bmp_from_file("res/icons/magnifying_glass.bmp", &arena);
+
+    D3D11_TEXTURE2D_DESC tex_desc = {0};
+    tex_desc.Width = texture.width;
+    tex_desc.Height = texture.height;
+    tex_desc.MipLevels = 1;
+    tex_desc.ArraySize = 1;
+    tex_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    tex_desc.SampleDesc.Count = 1;
+    tex_desc.SampleDesc.Quality = 0;
+    tex_desc.Usage = D3D11_USAGE_DEFAULT;
+    tex_desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    D3D11_SUBRESOURCE_DATA tex_init_data = {0};
+    tex_init_data.pSysMem = texture.data;
+    tex_init_data.SysMemPitch = texture.width*texture.channels;
+    tex_init_data.SysMemSlicePitch = texture.width*texture.height;
+
+    ID3D11Texture2D* d3d_tex = 0;
+    HR(device->lpVtbl->CreateTexture2D(device, &tex_desc, &tex_init_data, &d3d_tex));
+
+    D3D11_SHADER_RESOURCE_VIEW_DESC srv_desc = {0};
+    srv_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srv_desc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
+    srv_desc.Texture2D.MipLevels = 1;
+
+    HR(device->lpVtbl->CreateShaderResourceView(device, (ID3D11Resource*)d3d_tex, &srv_desc, &texture_view));
 
     MSG msg = {0};
     while (window->open)
@@ -200,17 +257,20 @@ int main()
         if (!window->open)
             break;
 
+        v4 clear_color = v4(0.5f, 0.5f, 0.5f, 0.5f);
         immediate_context->lpVtbl->OMSetRenderTargets(immediate_context, 1, &render_target_view, NULL);
-        immediate_context->lpVtbl->ClearRenderTargetView(immediate_context, render_target_view, color_black().e);
+        immediate_context->lpVtbl->ClearRenderTargetView(immediate_context, render_target_view, clear_color.e);
 
         UINT stride = sizeof(Vertex);
         UINT offset = 0;
         immediate_context->lpVtbl->IASetInputLayout(immediate_context, input_layout);
         immediate_context->lpVtbl->IASetVertexBuffers(immediate_context, 0, 1, &vertex_buffer, &stride, &offset);
         immediate_context->lpVtbl->IASetPrimitiveTopology(immediate_context, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+        immediate_context->lpVtbl->PSSetSamplers(immediate_context, 0, 1, &sampler_state);
+        immediate_context->lpVtbl->PSSetShaderResources(immediate_context, 0, 1, &texture_view);
         immediate_context->lpVtbl->VSSetShader(immediate_context, vertex_shader, NULL, 0);
         immediate_context->lpVtbl->PSSetShader(immediate_context, pixel_shader, NULL, 0);
-        immediate_context->lpVtbl->Draw(immediate_context, 3, 0);
+        immediate_context->lpVtbl->DrawIndexed(immediate_context, 6, 0, 0);
 
         HR(swap_chain->lpVtbl->Present(swap_chain, 1, 0));
     }

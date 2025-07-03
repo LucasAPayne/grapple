@@ -1,7 +1,7 @@
 #include "types.h"
+#include "win32_base.h"
 
 #include <windows.h>
-#include <strsafe.h>
 
 global HICON global_window_icon;
 
@@ -12,23 +12,6 @@ typedef struct
     b32 open;
     void* ptr; // OS handle to window
 } Window;
-
-// NOTE(lucas): Only call after functions whose errors can be retrieved via GetLastError, not those that return HRESULT.
-#ifdef GRAPPLE_DEBUG
-    #define win32_error_callback() do                                                                           \
-    {                                                                                                           \
-        DWORD win32_err = GetLastError();                                                                       \
-        char win32_msg[512] = "Unknown error";                                                                  \
-        char win32_full_buf[1024];                                                                              \
-        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, win32_err,             \
-                    MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), win32_msg, 0, NULL);                             \
-        StringCchPrintfA(win32_full_buf, sizeof(win32_full_buf), "Win32 call failed near %s:%d\n\nMessage: %s", \
-                        __FILE__, __LINE__, win32_msg);                                                         \
-        MessageBoxA(NULL, win32_full_buf, TEXT("Error"), MB_ICONERROR);                                         \
-    } while(0)
-#else
-    #define win32_error_callback() ((void)0);
-#endif
 
 internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
@@ -66,12 +49,12 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
             result = MAKELRESULT(0, MNC_CLOSE);
         } break;
 
-        case WM_SYSKEYDOWN:
-        case WM_SYSKEYUP:
-        case WM_KEYDOWN:
-        {
-            ASSERT(0, "Keyboard input came in through a non-dispatch message!");
-        } break;
+        // case WM_SYSKEYDOWN:
+        // case WM_SYSKEYUP:
+        // case WM_KEYDOWN:
+        // {
+        //     ASSERT(0, "Keyboard input came in through a non-dispatch message!");
+        // } break;
 
         /*
         All message types that are not explicitly handled will end up here. DefWindowProc just provides default
