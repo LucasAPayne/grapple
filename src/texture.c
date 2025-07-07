@@ -3,39 +3,6 @@
 #include "memory.h"
 #include "texture.h"
 
-BitScanResult find_least_significant_bit(u32 value)
-{
-    BitScanResult result = {0};
-    result.found = _BitScanForward(&result.index, value);
-    return result;
-}
-
-inline v4 srgb255_to_linear1(v4 c)
-{
-    v4 result = v4_zero();
-
-    f32 inv_255 = 1.0f/255.0f;
-
-    result.r = sq_f32(inv_255*c.r);
-    result.g = sq_f32(inv_255*c.g);
-    result.b = sq_f32(inv_255*c.b);
-    result.a = inv_255*c.a;
-
-    return result;
-}
-
-inline v4 linear1_to_srgb255(v4 c)
-{
-    v4 result = v4_zero();
-
-    result.r = 255.0f*sqrt_f32(c.r);
-    result.g = 255.0f*sqrt_f32(c.g);
-    result.b = 255.0f*sqrt_f32(c.b);
-    result.a = 255.0f*c.a;
-
-    return result;
-}
-
 // TODO(lucas): Full bitmap support should separate the BMP header from the DIB header
 // and allow using different versions of the DIB header.
 #pragma pack(push, 1)
@@ -70,6 +37,39 @@ typedef struct BitmapHeader
     u32 blue_mask;
 } BitmapHeader;
 #pragma pack(pop)
+
+BitScanResult find_least_significant_bit(u32 value)
+{
+    BitScanResult result = {0};
+    result.found = _BitScanForward(&result.index, value);
+    return result;
+}
+
+inline v4 srgb255_to_linear1(v4 c)
+{
+    v4 result = v4_zero();
+
+    f32 inv_255 = 1.0f/255.0f;
+
+    result.r = sq_f32(inv_255*c.r);
+    result.g = sq_f32(inv_255*c.g);
+    result.b = sq_f32(inv_255*c.b);
+    result.a = inv_255*c.a;
+
+    return result;
+}
+
+inline v4 linear1_to_srgb255(v4 c)
+{
+    v4 result = v4_zero();
+
+    result.r = 255.0f*sqrt_f32(c.r);
+    result.g = 255.0f*sqrt_f32(c.g);
+    result.b = 255.0f*sqrt_f32(c.b);
+    result.a = 255.0f*c.a;
+
+    return result;
+}
 
 Texture load_bmp_from_memory(u8* data, size data_size)
 {

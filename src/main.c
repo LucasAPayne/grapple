@@ -37,9 +37,14 @@
 
 typedef struct
 {
-    v2 pos;
+    v2 pos; // Screen-space position
     v2 tex_coord;
 } Vertex;
+
+typedef struct
+{
+    m4 proj;
+} CBProj;
 
 global IDXGISwapChain* swap_chain;
 global ID3D11Device* device;
@@ -137,32 +142,18 @@ internal void init_d3d11(Window* window)
     HR(device->lpVtbl->CreateInputLayout(device, layout, countof(layout), d3d11_vshader, sizeof(d3d11_vshader),
        &input_layout));
 
-    // TODO(lucas): Because I'm using BMPs, which are normally stored bottom-up, I have flipped the texture coordinates.
-    // Re-evaluate this decision later.
-    Vertex verts[] =
-    {
-        { v2(-0.5f,  0.5f), v2(0.0f, 1.0f) },
-        { v2( 0.5f,  0.5f), v2(1.0f, 1.0f) },
-        { v2( 0.5f, -0.5f), v2(1.0f, 0.0f) },
-        { v2(-0.5f, -0.5f), v2(0.0f, 0.0f) },
-    };
+    D3D11_BUFFER_DESC vb_desc = {0};
+    vb_desc.ByteWidth = 4*sizeof(Vertex);
+    vb_desc.Usage = D3D11_USAGE_DYNAMIC;
+    vb_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+    vb_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    HR(device->lpVtbl->CreateBuffer(device, &vb_desc, NULL, &vertex_buffer));
 
     u16 indices[] =
     {
         0, 1, 2,
-        0, 2, 3
+        2, 1, 3
     };
-
-    D3D11_BUFFER_DESC vb_desc = {0};
-    vb_desc.ByteWidth = sizeof(verts);
-    vb_desc.Usage = D3D11_USAGE_IMMUTABLE;
-    vb_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-
-    D3D11_SUBRESOURCE_DATA vinit_data = {0};
-    vinit_data.pSysMem = verts;
-
-    HR(device->lpVtbl->CreateBuffer(device, &vb_desc, &vinit_data, &vertex_buffer));
-
     D3D11_BUFFER_DESC ib_desc = {0};
     ib_desc.Usage = D3D11_USAGE_IMMUTABLE;
     ib_desc.ByteWidth = sizeof(indices);
@@ -170,9 +161,7 @@ internal void init_d3d11(Window* window)
 
     D3D11_SUBRESOURCE_DATA iinit_data = {0};
     iinit_data.pSysMem = indices;
-
     HR(device->lpVtbl->CreateBuffer(device, &ib_desc, &iinit_data, &index_buffer));
-
     immediate_context->lpVtbl->IASetIndexBuffer(immediate_context, index_buffer, DXGI_FORMAT_R16_UINT, 0);
 
     D3D11_SAMPLER_DESC sampler_desc = {0};
@@ -214,17 +203,45 @@ void release_d3d11()
     com_release(blend_state);
 }
 
+void draw_texture(v2 pos, v2 dim)
+{
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    immediate_context->lpVtbl->Map(immediate_context, (ID3D11Resource*)vertex_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    Vertex* verts = (Vertex*)mapped.pData;
+
+    f32 x = pos.x;
+    f32 y = pos.y;
+    f32 w = dim.x;
+    f32 h = dim.y;
+    verts[0] = (Vertex){ pos,              v2(0.0f, 1.0f) };
+    verts[1] = (Vertex){ v2(x + w, y),     v2(1.0f, 1.0f) };
+    verts[2] = (Vertex){ v2(x,     y + h), v2(0.0f, 0.0f) };
+    verts[3] = (Vertex){ v2(x + w, y + h), v2(1.0f, 0.0f) };
+
+    immediate_context->lpVtbl->Unmap(immediate_context, (ID3D11Resource*)vertex_buffer, 0);
+}
+
 int main(void)
 {
 #ifdef GRAPPLE_DEBUG
     _CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
 
-    Window* window = window_create("Grapple", 800, 600);
+    int window_width = 800;
+    int window_height = 600;
+    Window* window = window_create("Grapple", window_width, window_height);
     init_d3d11(window);
-
     ASSERT(immediate_context, "D3D immediate context is null");
     ASSERT(swap_chain, "D3D swap chain is null");
+
+    m4 proj = ortho_top_left((f32)window_width, (f32)window_height);
+    ID3D11Buffer* proj_buffer = {0};
+    D3D11_BUFFER_DESC proj_desc = {0};
+    proj_desc.ByteWidth = sizeof(proj);
+    proj_desc.Usage = D3D11_USAGE_DYNAMIC;
+    proj_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+    proj_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    HR(device->lpVtbl->CreateBuffer(device, &proj_desc, NULL, &proj_buffer));
 
     Arena arena = arena_alloc(MEGABYTES(10));
     Texture texture = load_bmp_from_file("res/icons/magnifying_glass.bmp", &arena);
@@ -243,7 +260,7 @@ int main(void)
     D3D11_SUBRESOURCE_DATA tex_init_data = {0};
     tex_init_data.pSysMem = texture.data;
     tex_init_data.SysMemPitch = texture.width*texture.channels;
-    tex_init_data.SysMemSlicePitch = texture.width*texture.height;
+    tex_init_data.SysMemSlicePitch = texture.width*texture.height*texture.channels;
 
     ID3D11Texture2D* d3d_tex = 0;
     HR(device->lpVtbl->CreateTexture2D(device, &tex_desc, &tex_init_data, &d3d_tex));
@@ -273,7 +290,14 @@ int main(void)
         if (!window->open)
             break;
 
-        v4 clear_color = v4(0.5f, 0.5f, 0.5f, 0.5f);
+        D3D11_MAPPED_SUBRESOURCE mapped = {0};
+        HR(immediate_context->lpVtbl->Map(immediate_context, (ID3D11Resource*)proj_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+        CBProj* cb = (CBProj*)mapped.pData;
+        cb->proj = m4_transpose(ortho_top_left((f32)window_width, (f32)window_height));
+        immediate_context->lpVtbl->Unmap(immediate_context, (ID3D11Resource*)proj_buffer, 0);
+        immediate_context->lpVtbl->VSSetConstantBuffers(immediate_context, 0, 1, &proj_buffer);
+
+        v4 clear_color = v4(0.2f, 0.2f, 0.2f, 1.0f);
         immediate_context->lpVtbl->OMSetRenderTargets(immediate_context, 1, &render_target_view, NULL);
         immediate_context->lpVtbl->ClearRenderTargetView(immediate_context, render_target_view, clear_color.e);
 
@@ -288,11 +312,14 @@ int main(void)
         immediate_context->lpVtbl->PSSetShader(immediate_context, pixel_shader, NULL, 0);
         immediate_context->lpVtbl->OMSetBlendState(immediate_context, blend_state, NULL, 0xffffffff);
 
+        draw_texture(v2(50.0f, 50.0f), v2(32.0f, 32.0f));
+
         immediate_context->lpVtbl->DrawIndexed(immediate_context, 6, 0, 0);
 
         HR(swap_chain->lpVtbl->Present(swap_chain, 1, 0));
     }
 
+    com_release(proj_buffer);
     release_d3d11();
     return 0;
 }
