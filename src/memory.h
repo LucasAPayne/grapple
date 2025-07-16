@@ -1,5 +1,6 @@
 #pragma once
 
+#include "win32_base.h"
 #include "types.h"
 
 #include <windows.h>

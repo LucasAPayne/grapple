@@ -48,3 +48,23 @@
 #else
     #define win32_error_callback() ((void)0);
 #endif
+
+#ifdef GRAPPLE_DEBUG
+	#define HR(x) do                                                                                             \
+	{                                                                                                            \
+		HRESULT hr_hr = (x);                                                                                     \
+		if(FAILED(hr_hr))                                                                                        \
+		{                                                                                                        \
+            char hr_msg[512] = "Unknown error";                                                                  \
+            char hr_buf[1024];                                                                                   \
+            FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr_hr, 0, hr_msg,   \
+                           sizeof(hr_msg), NULL);                                                                \
+            StringCchPrintfA(hr_buf, sizeof(hr_buf), "D3D call failed at %s:%d, HRESULT: 0x%08X\n\nMessage: %s", \
+                             __FILE__, __LINE__, hr_hr, hr_msg);                                                 \
+			MessageBoxA(NULL, hr_buf, "Direct3D Error", MB_OK | MB_ICONERROR);                                   \
+            ExitProcess(1);                                                                                      \
+		}                                                                                                        \
+	} while(0)
+#else
+	#define HR(x) (x)
+#endif

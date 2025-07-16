@@ -10,8 +10,41 @@ typedef struct
     int width;
     int height;
     b32 open;
+
+    // Timing information used to calculate delta seconds for each frame.
+    // Not intended to be accessed
+    i64 ticks_per_second;
+    i64 prev_frame_ticks;
+
     void* ptr; // OS handle to window
 } Window;
+
+internal inline i64 win32_get_ticks(void)
+{
+    LARGE_INTEGER ticks;
+    QueryPerformanceCounter(&ticks);
+    return ticks.QuadPart;
+}
+
+f32 get_frame_seconds(Window* window)
+{
+    i64 start_ticks = window->prev_frame_ticks;
+    i64 end_ticks = win32_get_ticks();
+    i64 microseconds_elapsed = (end_ticks - start_ticks);
+
+	// We now have the elapsed number of ticks, along with the number of ticks-per-second. We use these values
+	// to convert to the number of elapsed microseconds. To guard against loss-of-precision,
+    // we convert to microseconds *before* dividing by ticks-per-second.
+	microseconds_elapsed *= 1000000;
+	microseconds_elapsed /= window->ticks_per_second;
+
+    f32 seconds_elapsed = (f32)microseconds_elapsed / 1000000.0f;
+    if (seconds_elapsed < 0.0f)
+        seconds_elapsed = 0.0f;
+
+    window->prev_frame_ticks = win32_get_ticks();
+    return seconds_elapsed;
+}
 
 internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
@@ -75,6 +108,10 @@ Window* window_create(const char* title, int width, int height)
 
     window->width = width;
     window->height = height;
+
+    LARGE_INTEGER frequency;
+    QueryPerformanceFrequency(&frequency);
+    window->ticks_per_second = frequency.QuadPart;
 
     // Open a window
     HINSTANCE instance = GetModuleHandleA(0);

@@ -1,6 +1,9 @@
+#include "font.h"
 #include "math.h"
-#include "texture.c"
 #include "types.h"
+#include "str.h"
+
+#include "texture.c"
 #include "window.c"
 
 #include "shaders/compiled/d3d11_pshader.h"
@@ -14,26 +17,6 @@
 {                                                \
     if(obj){obj->lpVtbl->Release(obj); obj = 0;} \
 } while(0)
-
-#ifdef GRAPPLE_DEBUG
-	#define HR(x) do                                                                                             \
-	{                                                                                                            \
-		HRESULT hr_hr = (x);                                                                                     \
-		if(FAILED(hr_hr))                                                                                        \
-		{                                                                                                        \
-            char hr_msg[512] = "Unknown error";                                                                  \
-            char hr_buf[1024];                                                                                   \
-            FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, hr_hr, 0, hr_msg,   \
-                           sizeof(hr_msg), NULL);                                                                \
-            StringCchPrintfA(hr_buf, sizeof(hr_buf), "D3D call failed at %s:%d, HRESULT: 0x%08X\n\nMessage: %s", \
-                             __FILE__, __LINE__, hr_hr, hr_msg);                                                 \
-			MessageBoxA(NULL, hr_buf, "Direct3D Error", MB_OK | MB_ICONERROR);                                   \
-            ExitProcess(1);                                                                                      \
-		}                                                                                                        \
-	} while(0)
-#else
-	#define HR(x) (x)
-#endif
 
 typedef struct
 {
@@ -67,18 +50,18 @@ internal inline v4 color_white(void)  {return (v4){1.0f, 1.0f, 1.0f, 1.0f};}
 
 internal void init_d3d11(Window* window)
 {
-    D3D_FEATURE_LEVEL feature_level;
-
-    UINT flags = D3D11_CREATE_DEVICE_SINGLETHREADED;
+    UINT flags = D3D11_CREATE_DEVICE_SINGLETHREADED | D3D11_CREATE_DEVICE_BGRA_SUPPORT;
 #ifdef GRAPPLE_DEBUG
     flags |= D3D11_CREATE_DEVICE_DEBUG;
 #endif
 
-    HR(D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags, NULL, 0, D3D11_SDK_VERSION,
+    D3D_FEATURE_LEVEL feature_levels[] = {D3D_FEATURE_LEVEL_11_1};
+    D3D_FEATURE_LEVEL feature_level;
+    HR(D3D11CreateDevice(NULL, D3D_DRIVER_TYPE_HARDWARE, NULL, flags, feature_levels, countof(feature_levels), D3D11_SDK_VERSION,
                          &device, &feature_level, &immediate_context));
-    if (feature_level != D3D_FEATURE_LEVEL_11_0)
+    if (feature_level != D3D_FEATURE_LEVEL_11_1)
     {
-        MessageBoxA(0, TEXT("Only Direct3D Feature Level 11.0 is currently supported."),
+        MessageBoxA(0, TEXT("Only Direct3D Feature Level 11.1 is currently supported."),
             "Direct3D Feature Level Unsupported", MB_ICONERROR);
         ExitProcess(1);
     }
@@ -244,7 +227,10 @@ int main(void)
     HR(device->lpVtbl->CreateBuffer(device, &proj_desc, NULL, &proj_buffer));
 
     Arena arena = arena_alloc(MEGABYTES(10));
+    Arena scratch_arena = arena_alloc(KILOBYTES(4));
     Texture texture = load_bmp_from_file("res/icons/magnifying_glass.bmp", &arena);
+
+    TextRenderer* tr = text_renderer_create(window->ptr, swap_chain, &arena);
 
     D3D11_TEXTURE2D_DESC tex_desc = {0};
     tex_desc.Width = texture.width;
@@ -290,6 +276,9 @@ int main(void)
         if (!window->open)
             break;
 
+        arena_clear(&scratch_arena);
+        f32 delta_time = get_frame_seconds(window);
+
         D3D11_MAPPED_SUBRESOURCE mapped = {0};
         HR(immediate_context->lpVtbl->Map(immediate_context, (ID3D11Resource*)proj_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
         CBProj* cb = (CBProj*)mapped.pData;
@@ -297,9 +286,11 @@ int main(void)
         immediate_context->lpVtbl->Unmap(immediate_context, (ID3D11Resource*)proj_buffer, 0);
         immediate_context->lpVtbl->VSSetConstantBuffers(immediate_context, 0, 1, &proj_buffer);
 
-        v4 clear_color = v4(0.2f, 0.2f, 0.2f, 1.0f);
+        v4 clear_color = v4(0.125f, 0.125f, 0.125f, 1.0f);
         immediate_context->lpVtbl->OMSetRenderTargets(immediate_context, 1, &render_target_view, NULL);
         immediate_context->lpVtbl->ClearRenderTargetView(immediate_context, render_target_view, clear_color.e);
+
+        draw_texture(v2(50.0f, 50.0f), v2(32.0f, 32.0f));
 
         UINT stride = sizeof(Vertex);
         UINT offset = 0;
@@ -312,9 +303,13 @@ int main(void)
         immediate_context->lpVtbl->PSSetShader(immediate_context, pixel_shader, NULL, 0);
         immediate_context->lpVtbl->OMSetBlendState(immediate_context, blend_state, NULL, 0xffffffff);
 
-        draw_texture(v2(50.0f, 50.0f), v2(32.0f, 32.0f));
-
         immediate_context->lpVtbl->DrawIndexed(immediate_context, 6, 0, 0);
+
+        s8 frame_ms_str = s8_format(&scratch_arena, "Frame time: %.2fms", delta_time*1000.0f);
+        s8 fps_str = s8_format(&scratch_arena, "FPS: %u", (u32)(1.0f/delta_time));
+        text_draw(tr, frame_ms_str, rect_min_dim(v2_zero(), v2_full(200.0f)), color_white());
+        text_draw(tr, fps_str, rect_min_dim(v2(0.0f, 20.0f), v2_full(200.0f)), color_white());
+        text_draw(tr, s8("Hello, Direct2D! αβγδεζηθ"), rect_min_dim(v2_full(200.0f), v2_full(200.0f)), color_white());
 
         HR(swap_chain->lpVtbl->Present(swap_chain, 1, 0));
     }
