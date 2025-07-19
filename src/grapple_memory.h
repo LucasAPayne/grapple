@@ -1,9 +1,6 @@
 #pragma once
 
-#include "win32_base.h"
 #include "types.h"
-
-#include <windows.h>
 
 #define KILOBYTES(value) ((u64)(value)*1024)
 #define MEGABYTES(value) ((u64)KILOBYTES(value)*1024)
@@ -15,15 +12,7 @@ typedef struct
     u8* data;
 } Arena;
 
-Arena arena_alloc(size bytes)
-{
-    Arena arena = {0};
-    arena.used = 0;
-    arena.data = (u8*)VirtualAllocEx(GetCurrentProcess(), NULL, bytes, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
-    if (arena.data)
-        arena.bytes = bytes;
-    return arena;
-}
+Arena arena_alloc(size bytes);
 
 inline void arena_pop(Arena* arena, size bytes)
 {

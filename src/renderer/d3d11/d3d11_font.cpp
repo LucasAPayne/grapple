@@ -1,7 +1,9 @@
-#include "font.h"
+#include "renderer/font.h"
+#include "platform/windows/win32_base.h"
 
 #include "d3d11_renderer.h"
-#include "win32_base.h"
+
+#include "grapple_memory.c"
 
 #include <d3d11.h>
 #include <d2d1_1.h>

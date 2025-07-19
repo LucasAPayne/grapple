@@ -1,9 +1,9 @@
 #include "grapple_math.h"
-#include "font.h"
-#include "renderer.h"
+#include "renderer/font.h"
+#include "renderer/renderer.h"
 
 #include "d3d11_renderer.h"
-#include "win32_base.h"
+#include "platform/windows/win32_base.h"
 
 #include "shaders/compiled/d3d11_pshader.h"
 #include "shaders/compiled/d3d11_vshader.h"

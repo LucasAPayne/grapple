@@ -4,6 +4,7 @@
 #include "grapple_memory.h"
 
 #include <stdarg.h> // varargs
+#include <stdio.h> // vsnprintf
 
 #define s8(s) (s8){(u8*)s, lengthof(s)}
 typedef struct

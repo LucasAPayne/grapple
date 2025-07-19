@@ -2,9 +2,11 @@
 #include "types.h"
 #include "str.h"
 
+#include "grapple_memory.c"
+#include "input.c"
+#include "window.c"
 #include "renderer/renderer.c"
 #include "renderer/texture.c"
-#include "window.c"
 
 int main(void)
 {
@@ -21,20 +23,9 @@ int main(void)
     renderer_set_projection(renderer, proj);
     Texture texture = texture_load_from_file("res/icons/magnifying_glass.bmp", renderer, &arena);
 
-    MSG msg = {0};
     while (window->open)
     {
-        while (PeekMessage(&msg, 0, 0, 0, PM_REMOVE))
-        {
-            if (msg.message == WM_QUIT)
-            {
-                window->open = false;
-                break;
-            }
-
-            TranslateMessage(&msg);
-            DispatchMessageA(&msg);
-        }
+        input_process(window);
 
         if (!window->open)
             break;
