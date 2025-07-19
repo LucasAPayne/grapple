@@ -1,4 +1,6 @@
 #include "font.h"
+
+#include "d3d11_renderer.h"
 #include "win32_base.h"
 
 #include <d3d11.h>
@@ -60,8 +62,9 @@ extern "C" void text_renderer_destroy(TextRenderer* tr)
     tr->text_format->Release();
 }
 
-extern "C" void text_draw(TextRenderer* tr, s8 text, rect bounds, v4 color)
+extern "C" void text_draw(Renderer* renderer, s8 text, rect bounds, v4 color)
 {
+    TextRenderer* tr = renderer->text_renderer;
     wchar_t* wide_buf = push_array(&tr->scratch_arena, text.len, wchar_t);
     int wide_len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, (const char*)text.data, (int)text.len,
                                        wide_buf, (int)text.len);

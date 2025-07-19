@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.h"
-#include "memory.h"
+#include "grapple_memory.h"
 
 #include <stdarg.h> // varargs
 

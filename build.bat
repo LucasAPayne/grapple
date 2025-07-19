@@ -51,7 +51,7 @@ fxc %shader_flags% /T ps_5_0 /E ps /Fh shaders/compiled/d3d11_pshader.h /Vn d3d1
 
 if not exist build mkdir build
 pushd build
-cl %compiler_flags% /c /I.. ..\src\font.cpp
-lib /nologo /out:font.lib font.obj
-cl %compiler_flags% /I.. ..\src\main.c %output_names% %linker_flags% %libs% font.lib
+cl %compiler_flags% /c /I..\src ..\src\renderer\d3d11_font.cpp
+lib /nologo /out:font.lib d3d11_font.obj
+cl %compiler_flags% /I.. /I..\src ..\src\main.c %output_names% %linker_flags% %libs% font.lib
 popd

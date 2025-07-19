@@ -68,3 +68,8 @@
 #else
 	#define HR(x) (x)
 #endif
+
+#define com_release(obj) do                      \
+{                                                \
+    if(obj){obj->lpVtbl->Release(obj); obj = 0;} \
+} while(0)

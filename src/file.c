@@ -114,6 +114,46 @@ char* get_filename(void* file_handle)
     return filename;
 }
 
+i64 file_seek(void* file_handle, i64 byte_offset, FileSeekMethod seek_method)
+{
+    ASSERT(file_handle, "Invalid file handle");
+
+    LARGE_INTEGER dist_to_move = {0};
+    dist_to_move.QuadPart = byte_offset;
+    LARGE_INTEGER new_ptr = {0};
+
+    DWORD method = 0;
+    switch (seek_method)
+    {
+        case FileSeek_Begin:   method = FILE_BEGIN;   break;
+        case FileSeek_Current: method = FILE_CURRENT; break;
+        case FileSeek_End:     method = FILE_END;     break;
+        default: ASSERTF(0, "Invalid file seek method: %d", seek_method); break;
+    }
+
+    b32 success = SetFilePointerEx(file_handle, dist_to_move, &new_ptr, method);
+    if (success == FALSE)
+    {
+        char* filename = get_filename(file_handle);
+        ASSERTF(0, "Failed to move file pointer %lld bytes using seek method %d in file %s",
+                byte_offset, seek_method, filename);
+        free(filename);
+        win32_error_callback();
+    }
+    i64 result = new_ptr.QuadPart;
+    return result;
+}
+
+i64 file_seek_begin(void* file_handle)
+{
+    return file_seek(file_handle, 0, FileSeek_Begin);
+}
+
+i64 file_seek_end(void* file_handle)
+{
+    return file_seek(file_handle, 0, FileSeek_End);
+}
+
 // TODO(lucas): Consider reading from/writing to files >4GB
 int file_read(void* file_handle, void* buffer, size num_bytes_to_read)
 {

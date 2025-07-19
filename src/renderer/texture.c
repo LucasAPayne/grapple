@@ -1,6 +1,6 @@
 #include "file.c"
-#include "math.h"
-#include "memory.h"
+#include "grapple_math.h"
+#include "grapple_memory.h"
 #include "texture.h"
 
 // TODO(lucas): Full bitmap support should separate the BMP header from the DIB header
@@ -176,4 +176,32 @@ Texture load_bmp_from_file(char* filename, Arena* arena)
     Texture result = load_bmp_from_memory(data, file_size);
 
     return result;
+}
+
+Texture texture_load_from_file(char* filename, Renderer* renderer, Arena* arena)
+{
+    size file_size = file_get_size(filename);
+    void* file = file_open(filename, FileMode_Read);
+    u16 signature = 0;
+    file_read(file, &signature, sizeof(signature));
+    b32 is_bmp = (signature == 0x4D42);
+
+    ASSERT(is_bmp, "Only BMP textures are currently supported");
+
+    Texture tex = {0};
+    if (is_bmp)
+    {
+        file_seek_begin(file);
+        u8* data = push_size(arena, file_size);
+        file_read(file, data, file_size);
+        tex = load_bmp_from_memory(data, file_size);
+        file_close(file);
+    }
+    else
+        return tex;
+
+    ASSERT(tex.data, "Failed to laod texture");
+
+    renderer_upload_texture(renderer, &tex);
+    return tex;
 }
