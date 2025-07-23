@@ -64,7 +64,7 @@ extern "C" void text_renderer_destroy(TextRenderer* tr)
     tr->text_format->Release();
 }
 
-extern "C" void text_draw(Renderer* renderer, s8 text, rect bounds, v4 color)
+extern "C" void text_draw_rect(Renderer* renderer, s8 text, rect bounds, v4 color)
 {
     TextRenderer* tr = renderer->text_renderer;
     wchar_t* wide_buf = push_array(&tr->scratch_arena, text.len, wchar_t);
@@ -81,3 +81,9 @@ extern "C" void text_draw(Renderer* renderer, s8 text, rect bounds, v4 color)
 
     arena_pop(&tr->scratch_arena, text.len*sizeof(wchar_t));
 }
+
+extern "C" void text_draw(Renderer* renderer, s8 text, v2 pos, v2 dim, v4 color)
+{
+    text_draw_rect(renderer, text, rect_min_dim(pos, dim), color);
+}
+

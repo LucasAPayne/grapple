@@ -95,26 +95,39 @@ internal Renderer* renderer_create(Window* window, Arena* arena)
     HR(renderer->device->lpVtbl->CreateInputLayout(renderer->device, layout, countof(layout), d3d11_vshader,
        sizeof(d3d11_vshader), &renderer->input_layout));
 
+    renderer->quads_per_batch = 1024;
+    renderer->vb_size = renderer->quads_per_batch*4*sizeof(Vertex);
+    renderer->ib_size = renderer->quads_per_batch*6*sizeof(u16);
+
+    renderer->cpu_vb = push_array(arena, renderer->quads_per_batch*4, Vertex);
+    renderer->cpu_ib = push_array(arena, renderer->quads_per_batch*6, u16);
+
     D3D11_BUFFER_DESC vb_desc = {0};
-    vb_desc.ByteWidth = 4*sizeof(Vertex);
+    vb_desc.ByteWidth = (UINT)renderer->vb_size;
     vb_desc.Usage = D3D11_USAGE_DYNAMIC;
     vb_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     vb_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    HR(renderer->device->lpVtbl->CreateBuffer(renderer->device, &vb_desc, NULL, &renderer->vertex_buffer));
+    HR(renderer->device->lpVtbl->CreateBuffer(renderer->device, &vb_desc, NULL, &renderer->vb));
 
-    u16 indices[] =
+    for (i16 i = 0; i < renderer->quads_per_batch; ++i)
     {
-        0, 1, 2,
-        2, 1, 3
-    };
+        u16 base = i*4;
+        u16* indices = &renderer->cpu_ib[i*6];
+        indices[0] = base + 0;
+        indices[1] = base + 1;
+        indices[2] = base + 2;
+        indices[3] = base + 2;
+        indices[4] = base + 1;
+        indices[5] = base + 3;
+    }
     D3D11_BUFFER_DESC ib_desc = {0};
     ib_desc.Usage = D3D11_USAGE_IMMUTABLE;
-    ib_desc.ByteWidth = sizeof(indices);
+    ib_desc.ByteWidth = renderer->ib_size;
     ib_desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
 
     D3D11_SUBRESOURCE_DATA iinit_data = {0};
-    iinit_data.pSysMem = indices;
-    HR(renderer->device->lpVtbl->CreateBuffer(renderer->device, &ib_desc, &iinit_data, &renderer->index_buffer));
+    iinit_data.pSysMem = renderer->cpu_ib;
+    HR(renderer->device->lpVtbl->CreateBuffer(renderer->device, &ib_desc, &iinit_data, &renderer->ib));
 
     D3D11_SAMPLER_DESC sampler_desc = {0};
     sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
@@ -164,8 +177,8 @@ internal void renderer_destroy(Renderer* renderer)
     com_release(renderer->pixel_shader);
     com_release(renderer->vertex_shader);
     com_release(renderer->input_layout);
-    com_release(renderer->vertex_buffer);
-    com_release(renderer->index_buffer);
+    com_release(renderer->vb);
+    com_release(renderer->ib);
     com_release(renderer->sampler_state);
     com_release(renderer->blend_state);
     com_release(renderer->proj_buffer);
@@ -217,38 +230,57 @@ internal void renderer_upload_texture(Renderer* renderer, Texture* texture)
     com_release(d3d_tex);
 }
 
+internal void renderer_flush_quads(Renderer* renderer)
+{
+    if (renderer->quads_in_batch == 0) return;
+
+    ++renderer->batch_count;
+
+    D3D11_MAPPED_SUBRESOURCE mapped = {0};
+    HR(renderer->ctx->lpVtbl->Map(renderer->ctx, (ID3D11Resource*)renderer->vb, 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped));
+    CopyMemory(mapped.pData, renderer->cpu_vb, renderer->quads_in_batch*4*sizeof(Vertex));
+    renderer->ctx->lpVtbl->Unmap(renderer->ctx, (ID3D11Resource*)renderer->vb, 0);
+
+    UINT stride = sizeof(Vertex);
+    UINT offset = 0;
+    renderer->ctx->lpVtbl->IASetInputLayout(renderer->ctx, renderer->input_layout);
+    renderer->ctx->lpVtbl->IASetVertexBuffers(renderer->ctx, 0, 1, &renderer->vb, &stride, &offset);
+    renderer->ctx->lpVtbl->IASetIndexBuffer(renderer->ctx, renderer->ib, DXGI_FORMAT_R16_UINT, 0);
+    renderer->ctx->lpVtbl->IASetPrimitiveTopology(renderer->ctx, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    renderer->ctx->lpVtbl->VSSetShader(renderer->ctx, renderer->vertex_shader, NULL, 0);
+    renderer->ctx->lpVtbl->PSSetShader(renderer->ctx, renderer->pixel_shader, NULL, 0);
+    renderer->ctx->lpVtbl->OMSetBlendState(renderer->ctx, renderer->blend_state, NULL, 0xffffffff);
+
+    // TODO(lucas): Texture atlas
+    ID3D11ShaderResourceView* texture_srv = renderer->current_texture->api_handle;
+    renderer->ctx->lpVtbl->PSSetSamplers(renderer->ctx, 0, 1, &renderer->sampler_state);
+    renderer->ctx->lpVtbl->PSSetShaderResources(renderer->ctx, 0, 1, &texture_srv);
+
+    renderer->ctx->lpVtbl->DrawIndexed(renderer->ctx, renderer->quads_in_batch*6, 0, 0);
+
+    renderer->quads_in_batch = 0;
+}
+
 internal void renderer_draw_texture(Renderer* renderer, Texture* texture, v2 pos, v2 dim)
 {
-    D3D11_MAPPED_SUBRESOURCE mapped;
-    renderer->ctx->lpVtbl->Map(renderer->ctx, (ID3D11Resource*)renderer->vertex_buffer, 0, D3D11_MAP_WRITE_DISCARD, 0,
-                               &mapped);
-    Vertex* verts = (Vertex*)mapped.pData;
+    ++renderer->quads_in_batch;
+    ++renderer->total_quads;
+    Texture* old_texture = texture;
+    renderer->current_texture = texture;
+
+    if (renderer->quads_in_batch >= renderer->quads_per_batch || texture != old_texture)
+        renderer_flush_quads(renderer);
 
     f32 x = pos.x;
     f32 y = pos.y;
     f32 w = dim.x;
     f32 h = dim.y;
+    Vertex* verts = renderer->cpu_vb + renderer->quads_in_batch*4;
     verts[0] = (Vertex){ pos,              v2(0.0f, 1.0f) };
     verts[1] = (Vertex){ v2(x + w, y),     v2(1.0f, 1.0f) };
     verts[2] = (Vertex){ v2(x,     y + h), v2(0.0f, 0.0f) };
     verts[3] = (Vertex){ v2(x + w, y + h), v2(1.0f, 0.0f) };
-
-    renderer->ctx->lpVtbl->Unmap(renderer->ctx, (ID3D11Resource*)renderer->vertex_buffer, 0);
-
-    renderer->ctx->lpVtbl->PSSetSamplers(renderer->ctx, 0, 1, &renderer->sampler_state);
-    renderer->ctx->lpVtbl->PSSetShaderResources(renderer->ctx, 0, 1, (ID3D11ShaderResourceView**)&texture->api_handle);
-
-    UINT stride = sizeof(Vertex);
-    UINT offset = 0;
-    renderer->ctx->lpVtbl->IASetInputLayout(renderer->ctx, renderer->input_layout);
-    renderer->ctx->lpVtbl->IASetVertexBuffers(renderer->ctx, 0, 1, &renderer->vertex_buffer, &stride, &offset);
-    renderer->ctx->lpVtbl->IASetIndexBuffer(renderer->ctx, renderer->index_buffer, DXGI_FORMAT_R16_UINT, 0);
-    renderer->ctx->lpVtbl->IASetPrimitiveTopology(renderer->ctx, D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-    renderer->ctx->lpVtbl->VSSetShader(renderer->ctx, renderer->vertex_shader, NULL, 0);
-    renderer->ctx->lpVtbl->PSSetShader(renderer->ctx, renderer->pixel_shader, NULL, 0);
-    renderer->ctx->lpVtbl->OMSetBlendState(renderer->ctx, renderer->blend_state, NULL, 0xffffffff);
-
-    renderer->ctx->lpVtbl->DrawIndexed(renderer->ctx, 6, 0, 0);
 }
 
 internal void renderer_clear(Renderer* renderer, v4 clear_color)
@@ -261,9 +293,13 @@ internal void renderer_begin_frame(Renderer* renderer, Window* window)
 {
     (void)window;
     renderer_set_projection(renderer, renderer->proj);
+    renderer->quads_in_batch = 0;
+    renderer->total_quads = 0;
+    renderer->batch_count = 0;
 }
 
 internal void renderer_end_frame(Renderer* renderer)
 {
+    renderer_flush_quads(renderer);
     HR(renderer->swap_chain->lpVtbl->Present(renderer->swap_chain, 1, 0));
 }
