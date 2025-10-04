@@ -12,6 +12,7 @@ typedef struct
 {
     v2 pos; // Screen-space position
     v2 tex_coord;
+    v4 color;
 } Vertex;
 
 typedef struct
@@ -49,5 +50,5 @@ typedef struct Renderer
     i32 vb_size;
     i32 ib_size;
 
-    Texture* current_texture;
+    TextureAtlas* atlas; // First atlas texture assumed to be white square
 } Renderer;

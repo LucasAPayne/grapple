@@ -89,8 +89,9 @@ internal Renderer* renderer_create(Window* window, Arena* arena)
 
     D3D11_INPUT_ELEMENT_DESC layout[] =
     {
-        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Vertex, pos),        D3D11_INPUT_PER_VERTEX_DATA, 0},
-        {"TEXCOORD",  0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Vertex, tex_coord), D3D11_INPUT_PER_VERTEX_DATA, 0}
+        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex, pos),       D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex, tex_coord), D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex, color),     D3D11_INPUT_PER_VERTEX_DATA, 0}
     };
     HR(renderer->device->lpVtbl->CreateInputLayout(renderer->device, layout, countof(layout), d3d11_vshader,
        sizeof(d3d11_vshader), &renderer->input_layout));
@@ -252,8 +253,7 @@ internal void renderer_flush_quads(Renderer* renderer)
     renderer->ctx->lpVtbl->PSSetShader(renderer->ctx, renderer->pixel_shader, NULL, 0);
     renderer->ctx->lpVtbl->OMSetBlendState(renderer->ctx, renderer->blend_state, NULL, 0xffffffff);
 
-    // TODO(lucas): Texture atlas
-    ID3D11ShaderResourceView* texture_srv = renderer->current_texture->api_handle;
+    ID3D11ShaderResourceView* texture_srv = renderer->atlas->tex.api_handle;
     renderer->ctx->lpVtbl->PSSetSamplers(renderer->ctx, 0, 1, &renderer->sampler_state);
     renderer->ctx->lpVtbl->PSSetShaderResources(renderer->ctx, 0, 1, &texture_srv);
 
@@ -262,25 +262,45 @@ internal void renderer_flush_quads(Renderer* renderer)
     renderer->quads_in_batch = 0;
 }
 
-internal void renderer_draw_texture(Renderer* renderer, Texture* texture, v2 pos, v2 dim)
+internal void renderer_draw_quad(Renderer* renderer, rect r, v4 color)
 {
+    rect uv = texture_atlas_uv_from_index(renderer->atlas, 0);
+    Vertex* verts = renderer->cpu_vb + renderer->quads_in_batch*4;
+    verts[0] = (Vertex){ v2(r.x,       r.y),       v2(uv.x, uv.y + uv.h),        color };
+    verts[1] = (Vertex){ v2(r.x + r.w, r.y),       v2(uv.x + uv.w, uv.y + uv.h), color };
+    verts[2] = (Vertex){ v2(r.x,       r.y + r.h), v2(uv.x, uv.y),               color };
+    verts[3] = (Vertex){ v2(r.x + r.w, r.y + r.h), v2(uv.x + uv.w, uv.y),        color };
+
     ++renderer->quads_in_batch;
     ++renderer->total_quads;
-    Texture* old_texture = texture;
-    renderer->current_texture = texture;
 
-    if (renderer->quads_in_batch >= renderer->quads_per_batch || texture != old_texture)
+    if (renderer->quads_in_batch >= renderer->quads_per_batch)
         renderer_flush_quads(renderer);
+}
 
-    f32 x = pos.x;
-    f32 y = pos.y;
-    f32 w = dim.x;
-    f32 h = dim.y;
+internal void renderer_draw_texture(Renderer* renderer, TextureAtlas* atlas, u32 atlas_idx, v2 pos, v2 dim)
+{
+    if (!renderer->atlas)
+        renderer->atlas = atlas;
+
+        f32 x = pos.x;
+        f32 y = pos.y;
+        f32 w = dim.x;
+        f32 h = dim.y;
+
+        rect uv = texture_atlas_uv_from_index(atlas, atlas_idx);
+
     Vertex* verts = renderer->cpu_vb + renderer->quads_in_batch*4;
-    verts[0] = (Vertex){ pos,              v2(0.0f, 1.0f) };
-    verts[1] = (Vertex){ v2(x + w, y),     v2(1.0f, 1.0f) };
-    verts[2] = (Vertex){ v2(x,     y + h), v2(0.0f, 0.0f) };
-    verts[3] = (Vertex){ v2(x + w, y + h), v2(1.0f, 0.0f) };
+    verts[0] = (Vertex){ pos,              v2(uv.x, uv.y + uv.h),        color_white() };
+    verts[1] = (Vertex){ v2(x + w, y),     v2(uv.x + uv.w, uv.y + uv.h), color_white() };
+    verts[2] = (Vertex){ v2(x,     y + h), v2(uv.x, uv.y),               color_white() };
+    verts[3] = (Vertex){ v2(x + w, y + h), v2(uv.x + uv.w, uv.y),        color_white() };
+
+    ++renderer->quads_in_batch;
+    ++renderer->total_quads;
+
+    if (renderer->quads_in_batch >= renderer->quads_per_batch)
+        renderer_flush_quads(renderer);
 }
 
 internal void renderer_clear(Renderer* renderer, v4 clear_color)

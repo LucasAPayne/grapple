@@ -205,3 +205,38 @@ Texture texture_load_from_file(char* filename, Renderer* renderer, Arena* arena)
     renderer_upload_texture(renderer, &tex);
     return tex;
 }
+
+TextureAtlas texture_atlas_load_from_file(char* filename, Renderer* renderer, Arena* arena, u32 total_textures,
+    u32 textures_per_row, i32 tex_width, i32 tex_height)
+{
+    TextureAtlas result = {0};
+    result.total_textures = total_textures;
+    result.textures_per_row = textures_per_row;
+    result.tex_width = tex_width;
+    result.tex_height = tex_height;
+    result.tex = texture_load_from_file(filename, renderer, arena);
+
+    return result;
+}
+
+rect texture_atlas_uv_from_index(TextureAtlas* atlas, u32 idx)
+{
+    rect result = {0};
+
+    u32 rows = (atlas->total_textures + atlas->textures_per_row - 1) / atlas->textures_per_row;
+    i32 total_w = atlas->tex_width*atlas->textures_per_row;
+    i32 total_h = atlas->tex_height*rows;
+
+    u32 row = idx / atlas->textures_per_row;
+
+    i32 x = idx*atlas->tex_width % total_w;
+    i32 y = row*atlas->tex_height;
+
+    result.x = (f32)x / (f32)total_w;
+    result.y = (f32)y / (f32)total_h;
+    result.w = (f32)atlas->tex_width / total_w;
+    result.h = (f32)atlas->tex_height / total_h;
+
+    return result;
+}
+

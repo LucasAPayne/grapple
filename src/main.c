@@ -21,7 +21,8 @@ int main(void)
 
     m4 proj = ortho_top_left((f32)window_width, (f32)window_height);
     renderer_set_projection(renderer, proj);
-    Texture texture = texture_load_from_file("res/icons/magnifying_glass.bmp", renderer, &arena);
+    TextureAtlas atlas = texture_atlas_load_from_file("res/grapple_atlas.bmp", renderer, &arena, 2, 2, 32, 32);
+    renderer->atlas = &atlas;
 
     while (window->open)
     {
@@ -40,11 +41,12 @@ int main(void)
         v2 tex_size = v2_full(32.0f);
         for (u32 i = 0; i < 2000; ++i)
         {
-            renderer_draw_texture(renderer, &texture, v2(150.0f, 50.0f),   tex_size);
-            renderer_draw_texture(renderer, &texture, v2(200.0f, 50.0f),  tex_size);
-            renderer_draw_texture(renderer, &texture, v2(150.0f, 100.0f),  tex_size);
-            renderer_draw_texture(renderer, &texture, v2(200.0f, 100.0f), tex_size);
+            renderer_draw_quad(renderer, rect(150.0f, 50.0f, tex_size.x, tex_size.y), color_red());
+            renderer_draw_texture(renderer, &atlas, 1, v2(200.0f, 50.0f),  tex_size);
+            renderer_draw_texture(renderer, &atlas, 1, v2(150.0f, 100.0f), tex_size);
+            renderer_draw_quad(renderer, rect(200.0f, 100.0f, tex_size.x, tex_size.y), color_blue());
         }
+
 
         s8 batch_size_str = s8_format(&scratch_arena, "Batch size: %d", renderer->quads_per_batch);
         s8 quad_count_str = s8_format(&scratch_arena, "Num quads: %d", renderer->total_quads);

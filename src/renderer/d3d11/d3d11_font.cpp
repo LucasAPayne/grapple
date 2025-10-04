@@ -76,7 +76,7 @@ extern "C" void text_draw_rect(Renderer* renderer, s8 text, rect bounds, v4 colo
     tr->render_target->BeginDraw();
     tr->brush->SetColor(D2D1::ColorF(color.r, color.g, color.b, color.a));
     tr->render_target->DrawText(wide_buf, (UINT32)text.len, tr->text_format,
-                                D2D1::RectF(bounds.min.x, bounds.min.y, bounds.max.x, bounds.max.y), tr->brush);
+                                D2D1::RectF(bounds.x, bounds.y, bounds.x+bounds.w, bounds.y+bounds.h), tr->brush);
     HR(tr->render_target->EndDraw());
 
     arena_pop(&tr->scratch_arena, text.len*sizeof(wchar_t));
