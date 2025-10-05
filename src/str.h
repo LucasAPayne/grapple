@@ -17,7 +17,7 @@ internal inline s8 s8_alloc(Arena* arena, size len)
 {
     s8 result = {0};
     result.data = push_array(arena, len, u8);
-    result.len = len;
+    zero_array(result.data, len, u8);
     return result;
 }
 
@@ -29,6 +29,7 @@ internal inline s8 s8_format(Arena* arena, const char* format, ...)
     va_end(args);
 
     s8 result = s8_alloc(arena, len);
+    result.len = len;
 
     va_start(args, format);
     vsnprintf((char*)result.data, len+1, format, args);

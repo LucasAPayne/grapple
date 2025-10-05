@@ -66,8 +66,10 @@ extern "C" void text_renderer_destroy(TextRenderer* tr)
 
 extern "C" void text_draw_rect(Renderer* renderer, s8 text, rect bounds, v4 color)
 {
+    if (text.len <= 0) return;
+
     TextRenderer* tr = renderer->text_renderer;
-    wchar_t* wide_buf = push_array(&tr->scratch_arena, text.len, wchar_t);
+    wchar_t* wide_buf = (wchar_t*)push_array(&tr->scratch_arena, text.len, u8);
     int wide_len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, (const char*)text.data, (int)text.len,
                                        wide_buf, (int)text.len);
     ASSERT(wide_len > 0, "Conversion to UTF-16 failed!");
@@ -75,11 +77,12 @@ extern "C" void text_draw_rect(Renderer* renderer, s8 text, rect bounds, v4 colo
 
     tr->render_target->BeginDraw();
     tr->brush->SetColor(D2D1::ColorF(color.r, color.g, color.b, color.a));
-    tr->render_target->DrawText(wide_buf, (UINT32)text.len, tr->text_format,
+    tr->render_target->DrawText(wide_buf, wide_len, tr->text_format,
                                 D2D1::RectF(bounds.x, bounds.y, bounds.x+bounds.w, bounds.y+bounds.h), tr->brush);
     HR(tr->render_target->EndDraw());
 
-    arena_pop(&tr->scratch_arena, text.len*sizeof(wchar_t));
+    zero_array(tr->scratch_arena.data, text.len, u8);
+    arena_pop(&tr->scratch_arena, text.len*sizeof(u8));
 }
 
 extern "C" void text_draw(Renderer* renderer, s8 text, v2 pos, v2 dim, v4 color)
