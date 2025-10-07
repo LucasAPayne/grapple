@@ -25,12 +25,20 @@ int main(void)
     TextureAtlas atlas = texture_atlas_load_from_file("res/grapple_atlas.bmp", renderer, &arena, 2, 2, 32, 32);
     renderer->atlas = &atlas;
 
+    f32 font_size = text_renderer_get_font_size(renderer->text_renderer);
+
     size max_len = 64;
     size chars = 0;
     s8 buffer = s8_alloc(&arena, max_len*sizeof(u32));
 
+    f32 caret_timer = 0.0f;
+    f32 blink_rate = 0.5f;
+    b32 show_caret = true;
+    size caret_idx = 0;
+
     while (window->open)
     {
+        f32 dt = get_frame_seconds(window);
         input_process(window, &input);
 
         if (!window->open)
@@ -44,18 +52,22 @@ int main(void)
         {
             if (input.current_char == '\b') // backspace
             {
-                // For UTF-8 text, keep walking back until the byte does not have the UTF-8 continuation byte.
-                // In other words, stop when a byte is found that does *not* begin with 0b10...
-                while (buffer.len > 0 && ((buffer.data[buffer.len-1] & 0xC0) == 0x80))
+                if (caret_idx > 0 && buffer.len > 0)
                 {
-                    --buffer.len;
-                    buffer.data[buffer.len] = 0;
-                }
-                if (buffer.len > 0)
-                {
-                    --chars;
-                    --buffer.len;
-                    buffer.data[buffer.len] = 0;
+                    // For UTF-8 text, keep walking back until the byte does not have the UTF-8 continuation byte.
+                    // In other words, stop when a byte is found that does *not* begin with 0b10...
+                    size i = caret_idx - 1;
+                    while (buffer.len > 0 && ((buffer.data[i] & 0xC0) == 0x80))
+                        --i;
+
+                    size bytes_to_delete = caret_idx - i;
+                    for (size b = 0; b < bytes_to_delete; ++b)
+                        s8_delete(&buffer, i);
+
+                    caret_idx = i;
+
+                    if (chars > 0)
+                        --chars;
                 }
             }
             else
@@ -65,15 +77,61 @@ int main(void)
                 int num_bytes = WideCharToMultiByte(CP_UTF8, 0, &wc, 1, utf8, sizeof(utf8), NULL, NULL);
                 if (chars < max_len)
                 {
-                    ++chars;
                     if (input.current_char <= UINT32_MAX)
                     {
                         for (int i = 0; i < num_bytes; ++i)
-                            buffer.data[buffer.len + i] = utf8[i];
-                        buffer.len += num_bytes;
+                            s8_insert(&buffer, utf8[i], caret_idx+i, max_len);
                     }
+
+                    caret_idx += num_bytes;
+                    ++chars;
                 }
             }
+        }
+        else if (input.del)
+        {
+            if (caret_idx >= 0 && buffer.len > 0)
+            {
+                // For UTF-8 text, keep walking back until the byte does not have the UTF-8 continuation byte.
+                // In other words, stop when a byte is found that does *not* begin with 0b10...
+                size i = caret_idx + 1;
+                while (buffer.len > 0 && ((buffer.data[i] & 0xC0) == 0x80))
+                    ++i;
+
+                size bytes_to_delete = i - caret_idx;
+                for (size b = 0; b < bytes_to_delete; ++b)
+                    s8_delete(&buffer, caret_idx);
+
+                if (chars > 0)
+                    --chars;
+            }
+        }
+
+        /* Update */
+        caret_timer += dt;
+        if (input.current_char || input.left_arrow || input.right_arrow)
+        {
+            show_caret = true;
+            caret_timer = 0.0f;
+        }
+        if (caret_timer > blink_rate)
+        {
+            show_caret = !show_caret;
+            caret_timer = 0.0f;
+        }
+
+        // TODO(lucas): The caret index needs to look at the next or previous character and potentially jump multiple bytes
+        if (caret_idx > 0 && input.left_arrow)
+        {
+            size i = caret_idx - 1;
+            while (buffer.len > 0 && ((buffer.data[i] & 0xC0) == 0x80))
+                --i;
+            caret_idx = i;
+        }
+        if (caret_idx < buffer.len && input.right_arrow)
+        {
+            int num_bytes = utf8_get_num_bytes(buffer.data[caret_idx]);
+            caret_idx += num_bytes;
         }
 
         /* Draw */
@@ -81,8 +139,22 @@ int main(void)
         v4 clear_color = v4(0.125f, 0.125f, 0.125f, 1.0f);
         renderer_clear(renderer, clear_color);
 
-        v2 text_bounds = v2_full(200.0f);
-        text_draw(renderer, buffer, v2_full(200.0f), text_bounds, color_white());
+        // TODO(lucas): If the text exceeds the horizontal bounds, start scrolling horizontally
+        f32 padding = 2.0f;
+        rect text_box = rect(200.0f, 200.0f, 200.0f, font_size+10.0f);
+        rect text_box_border = rect(text_box.x-1.0f, text_box.y-1.0f, text_box.w+2.0f, text_box.h+2.0f);
+        rect text_bounds = rect(text_box.x+padding, text_box.y, text_box.w-padding, text_box.h);
+        v2 caret_pos = text_get_cursor_position(renderer->text_renderer, buffer, text_bounds, caret_idx);
+        rect cursor = rect(caret_pos.x, caret_pos.y+2.0f, 2.0f, font_size+2.0f);
+        renderer_draw_quad(renderer, text_box_border, color_white());
+        renderer_draw_quad(renderer, text_box, clear_color);
+
+        if (show_caret)
+            renderer_draw_quad(renderer, cursor, color_white());
+
+        // Quads must be flushed before drawing text because text is drawn immediately.
+        renderer_flush_quads(renderer);
+        text_draw_rect(renderer, buffer, text_bounds, color_white());
 
         renderer_end_frame(renderer);
     }

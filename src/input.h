@@ -5,6 +5,9 @@
 typedef struct
 {
     u64 current_char;
+    b32 left_arrow;
+    b32 right_arrow;
+    b32 del;
 } Input;
 
 void input_process(Window* window, Input* input);

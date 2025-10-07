@@ -8,6 +8,9 @@ void input_process(Window* window, Input* input)
 {
     // Clear any char that was entered last frame
     input->current_char = 0;
+    input->left_arrow = false;
+    input->right_arrow = false;
+    input->del = false;
 
     MSG msg = {0};
     while (PeekMessageA(&msg, 0, 0, 0, PM_REMOVE))
@@ -18,6 +21,20 @@ void input_process(Window* window, Input* input)
             {
                 window->open = false;
                 DestroyWindow(window->ptr);
+            } break;
+
+            case WM_KEYDOWN:
+            {
+                UINT vk = LOWORD(msg.wParam);
+                switch (vk)
+                {
+                    case VK_LEFT:   input->left_arrow = true;  break;
+                    case VK_RIGHT:  input->right_arrow = true; break;
+                    case VK_DELETE: input->del = true;         break;
+                    default: break;
+                }
+
+                TranslateMessage(&msg);
             } break;
 
             case WM_CHAR:

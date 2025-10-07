@@ -69,13 +69,6 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
             result = MAKELRESULT(0, MNC_CLOSE);
         } break;
 
-        // case WM_SYSKEYDOWN:
-        // case WM_SYSKEYUP:
-        // case WM_KEYDOWN:
-        // {
-        //     ASSERT(0, "Keyboard input came in through a non-dispatch message!");
-        // } break;
-
         /*
         All message types that are not explicitly handled will end up here. DefWindowProc just provides default
         processing. Having a default case ensures that every Windows message gets processed.
