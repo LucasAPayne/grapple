@@ -72,11 +72,11 @@ int main(void)
             }
             else
             {
-                char utf8[4];
-                wchar_t wc = (wchar_t)input.current_char;
-                int num_bytes = WideCharToMultiByte(CP_UTF8, 0, &wc, 1, utf8, sizeof(utf8), NULL, NULL);
                 if (chars < max_len)
                 {
+                    u8 utf8[4] = {0};
+                    u32_to_bytes((u32)input.current_char, utf8);
+                    int num_bytes = utf8_get_num_bytes(utf8[0]);
                     if (input.current_char <= UINT32_MAX)
                     {
                         for (int i = 0; i < num_bytes; ++i)

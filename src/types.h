@@ -34,6 +34,20 @@ typedef int32_t b32;
 typedef float f32;
 typedef double f64;
 
+internal inline u32 bytes_to_u32(u8 b[4])
+{
+    u32 result = ((u32)b[0]) | ((u32)b[1] << 8) | ((u32)b[2] << 16) | ((u32)b[3] << 24);
+    return result;
+}
+
+internal inline void u32_to_bytes(u32 in, u8 out[4])
+{
+    out[0] = (in)       & 0xff;
+    out[1] = (in >> 8)  & 0xff;
+    out[2] = (in >> 16) & 0xff;
+    out[3] = (in >> 24) & 0xff;
+}
+
 #ifdef GRAPPLE_DEBUG
     #if defined(GRAPPLE_WIN32)
         #include <windows.h>

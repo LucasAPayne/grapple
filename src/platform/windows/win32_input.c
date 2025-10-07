@@ -39,7 +39,12 @@ void input_process(Window* window, Input* input)
 
             case WM_CHAR:
             {
-                input->current_char = msg.wParam;
+                char utf8[4] = {0};
+                wchar_t wc = (wchar_t)msg.wParam;
+                WideCharToMultiByte(CP_UTF8, 0, &wc, 1, utf8, sizeof(utf8), NULL, NULL);
+
+                input->current_char = bytes_to_u32((u8*)utf8);
+
             } break;
 
             default:
