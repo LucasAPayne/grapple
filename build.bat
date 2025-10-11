@@ -24,7 +24,7 @@ set debug_flags=/DGRAPPLE_DEBUG /Zi /Od /MTd
 set release_flags=/O2
 
 set linker_flags=/link /opt:ref /incremental:no /subsystem:windows /entry:mainCRTStartup
-set libs=kernel32.lib user32.lib d3d11.lib dxgi.lib dxguid.lib d2d1.lib dwrite.lib font.lib
+set libs=kernel32.lib user32.lib shell32.lib d3d11.lib dxgi.lib dxguid.lib d2d1.lib dwrite.lib font.lib
 
 if "%is_debug%"=="1" (
     set compiler_flags=%common_flags% %common_defs% %debug_flags%

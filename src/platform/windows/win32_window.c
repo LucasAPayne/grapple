@@ -3,6 +3,7 @@
 #include "win32_base.h"
 
 #include <windows.h>
+#include <shellapi.h>
 
 global HICON global_window_icon;
 
@@ -148,4 +149,11 @@ void window_icon_set_from_resource(int id)
 {
     global_window_icon = (HICON)LoadImageA(GetModuleHandleA(0), MAKEINTRESOURCEA(id), IMAGE_ICON,
                                            0, 0, LR_DEFAULTSIZE|LR_SHARED);
+}
+
+void open_vs_code(char* proj_path)
+{
+    HINSTANCE result = ShellExecuteA(NULL, "open", "code", proj_path, proj_path, SW_HIDE);
+    if ((INT_PTR)result <= 32)
+        win32_error_callback();
 }

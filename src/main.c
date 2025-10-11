@@ -8,6 +8,143 @@
 #include "renderer/renderer.c"
 #include "renderer/texture.c"
 
+typedef struct
+{
+    s8 name;
+    s8 path;
+} Project;
+
+internal inline void open_project(s8 proj_path, Arena* arena)
+{
+    char* dir = s8_get_char(arena, proj_path);
+    open_vs_code(dir);
+    arena_pop(arena, proj_path.len+1);
+}
+
+// TODO(lucas): Fuzz testing on ini parsing
+internal inline u32 get_num_projects(s8 settings_str)
+{
+    u32 result = 0;
+
+    s8 line = {0};
+    b32 parsing_projects = false;
+    b32 process_line = false;
+    b32 comment = false;
+    size line_start = 0;
+    size line_end = 0;
+    for (size i = 0; i < settings_str.len; ++i)
+    {
+        u8 c = settings_str.data[i];
+        if (c == '\n' && !comment)
+        {
+            process_line = true;
+            line_end = i;
+            line = s8_trim(s8_slice(settings_str, line_start, line_end));
+        }
+        else if (c == ';' || c == '#')
+        {
+            comment = true;
+            process_line = true;
+            line_end = max(i-1, 0);
+            line = s8_trim(s8_slice(settings_str, line_start, line_end));
+
+            while (i < settings_str.len && settings_str.data[i] != '\n')
+                ++i;
+        }
+
+        if (process_line)
+        {
+            if (parsing_projects)
+            {
+                if (s8_begins_with(line, '[') && s8_ends_with(line, ']'))
+                {
+                    parsing_projects = false;
+                    break;
+                }
+
+                s8_pair project = s8_split_first(line, '=');
+                if (project.right.data)
+                    ++result;
+            }
+            else
+            {
+                if (s8_eq(line, s8("[Projects]")))
+                    parsing_projects = true;
+            }
+            line_start = i+1;
+
+            comment = false;
+            process_line = false;
+        }
+    }
+
+    return result;
+}
+
+internal inline Project* load_projects(s8 settings_str, u32 num_projects, Arena* arena)
+{
+    Project* projects = push_array(arena, num_projects, Project);
+
+    s8 line = {0};
+    u32 proj_idx = 0;
+    b32 parsing_projects = false;
+    b32 process_line = false;
+    b32 comment = false;
+    size line_start = 0;
+    size line_end = 0;
+    for (size i = 0; i < settings_str.len; ++i)
+    {
+        u8 c = settings_str.data[i];
+        if (c == '\n' && !comment)
+        {
+            process_line = true;
+            line_end = i;
+            line = s8_trim(s8_slice(settings_str, line_start, line_end));
+        }
+        else if (c == ';' || c == '#')
+        {
+            comment = true;
+            process_line = true;
+            line_end = max(i-1, 0);
+            line = s8_trim(s8_slice(settings_str, line_start, line_end));
+
+            while (i < settings_str.len && settings_str.data[i] != '\n')
+                ++i;
+        }
+
+        if (process_line)
+        {
+            if (parsing_projects)
+            {
+                if (s8_begins_with(line, '[') && s8_ends_with(line, ']'))
+                {
+                    parsing_projects = false;
+                    break;
+                }
+
+                s8_pair project = s8_split_first(line, '=');
+                if (project.right.data)
+                {
+                    s8 proj_name = s8_trim(project.left);
+                    s8 proj_path = s8_trim(project.right);
+                    projects[proj_idx++] = (Project){.name=proj_name, .path=proj_path};
+                }
+            }
+            else
+            {
+                if (s8_eq(line, s8("[Projects]")))
+                    parsing_projects = true;
+            }
+            line_start = i+1;
+
+            comment = false;
+            process_line = false;
+        }
+    }
+
+    return projects;
+}
+
 int main(void)
 {
     int window_width = 800;
@@ -35,6 +172,22 @@ int main(void)
     f32 blink_rate = 0.5f;
     b32 show_caret = true;
     size caret_idx = 0;
+
+    char* settings_path = "grapple.ini";
+    size settings_size = file_get_size(settings_path);
+    s8 settings_str = s8_alloc(&arena, settings_size);
+    settings_str.len = settings_size;
+    void* settings_file = file_open(settings_path, FileMode_Read);
+    if (!settings_file)
+    {
+        // TODO(lucas): Message box
+        return 1;
+    }
+    file_read(settings_file, settings_str.data, settings_size);
+    file_close(settings_file);
+
+    u32 num_projects = get_num_projects(settings_str);
+    Project* projects = load_projects(settings_str, num_projects, &arena);
 
     while (window->open)
     {
@@ -68,6 +221,21 @@ int main(void)
 
                     if (chars > 0)
                         --chars;
+                }
+            }
+            else if (input.current_char == '\r') // enter
+            {
+                for (u32 proj_idx = 0; proj_idx < num_projects; ++proj_idx)
+                {
+                    Project project = projects[proj_idx];
+
+                    if (s8_eq(buffer, project.name) || s8_eq(buffer, project.path))
+                    {
+                        open_project(project.path, &scratch_arena);
+
+                        // TODO(lucas): Return to system tray
+                        return 0;
+                    }
                 }
             }
             else

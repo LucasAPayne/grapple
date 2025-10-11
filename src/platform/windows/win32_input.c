@@ -39,6 +39,8 @@ void input_process(Window* window, Input* input)
 
             case WM_CHAR:
             {
+                // Windows returns UTF-16 encoded characters, but the main application should only ever deal with UTF-8.
+                // Therefore, the platform layer needs to convert the text to UTF-8.
                 char utf8[4] = {0};
                 wchar_t wc = (wchar_t)msg.wParam;
                 WideCharToMultiByte(CP_UTF8, 0, &wc, 1, utf8, sizeof(utf8), NULL, NULL);
