@@ -217,7 +217,7 @@ int main(void)
     b32 show_caret = true;
     size caret_idx = 0;
 
-    char* settings_path = "config/test.ini";
+    char* settings_path = "config/grapple.ini";
     size settings_size = file_get_size(settings_path);
     s8 settings_str = s8_alloc(&arena, settings_size);
     settings_str.len = settings_size;
@@ -320,6 +320,7 @@ int main(void)
         }
 
         /* Update */
+        // TODO(lucas): Mouse input (focusing, text selection)
         // TODO(lucas): Only show caret when text box is focused
         caret_timer += dt;
         if (input.current_char || input.left_arrow || input.right_arrow)
@@ -351,7 +352,6 @@ int main(void)
         v4 clear_color = v4(0.125f, 0.125f, 0.125f, 1.0f);
         renderer_clear(renderer, clear_color);
 
-        // TODO(lucas): If the text exceeds the horizontal bounds, start scrolling horizontally
         v2 window_center = v2((f32)window->width/2.0f, (f32)window->height/2.0f);
         v2 text_box_size = v2(200.0f, font_size+10.0f);
         v2 icon_size = v2_full(text_box_size.y);
@@ -359,12 +359,21 @@ int main(void)
         v2 text_box_pos = v2(window_center.x - (text_box_size.x - icon_size.x)/2.0f, window_center.y - text_box_size.y/2.0f);
         v2 icon_pos = v2(text_box_pos.x - icon_size.x - 5.0f, text_box_pos.y);
 
-        f32 padding = 2.0f;
+        f32 padding = 4.0f;
         rect text_box = rect_min_dim(text_box_pos, text_box_size);
         rect text_box_border = rect(text_box.x-1.0f, text_box.y-1.0f, text_box.w+2.0f, text_box.h+2.0f);
         rect text_bounds = rect(text_box.x+padding, text_box.y, text_box.w-padding, text_box.h);
-        v2 caret_pos = text_get_cursor_position(renderer->text_renderer, buffer, text_bounds, caret_idx);
-        rect cursor = rect(caret_pos.x, caret_pos.y+4.0f, 2.0f, font_size+2.0f);
+        TextMetrics metrics =  text_get_metrics(renderer->text_renderer, buffer, text_bounds, caret_idx);
+
+        f32 scroll = 0.0f;
+        if (metrics.text_width < text_bounds.w - padding)
+            scroll = 0.0f;
+        else
+            scroll = metrics.text_width - text_bounds.w + padding;
+
+        metrics.caret_pos.x -= scroll;
+        rect cursor = rect(metrics.caret_pos.x, metrics.caret_pos.y+4.0f, 2.0f, font_size+2.0f);
+
         draw_texture(renderer, &atlas, 1, icon_pos, icon_size);
         draw_quad(renderer, text_box_border, color_white());
         draw_quad(renderer, text_box, clear_color);
@@ -374,7 +383,7 @@ int main(void)
 
         // Quads must be flushed before drawing text because text is drawn immediately.
         flush_quads(renderer);
-        draw_text_rect(renderer, buffer, text_bounds, color_white());
+        draw_text_rect(renderer, buffer, text_bounds, color_white(), scroll);
 
         renderer_end_frame(renderer);
     }
