@@ -140,6 +140,43 @@ internal inline s8 s8_until(s8 s, u8 c)
     return result;
 }
 
+internal inline b32 s8_contains(s8 s, u8 c)
+{
+    for (size i = 0; i < s.len; ++i)
+    {
+        if (s.data[i] == c)
+            return true;
+    }
+
+    return false;
+}
+
+// Returns whether string contains any of the characters in search
+internal inline b32 s8_contains_any(s8 s, s8 search)
+{
+    for (size search_idx = 0; search_idx < search.len; ++search_idx)
+    {
+        for (size idx = 0; idx < s.len; ++idx)
+        {
+            if (s.data[idx] == search.data[search_idx])
+                return true;
+        }
+    }
+    return false;
+}
+
+// Returns whether string contains any character whose integer representation is < 32
+internal inline b32 s8_contains_ctrl(s8 s)
+{
+    for (size i = 0; i < s.len; ++i)
+    {
+        if (s.data[i] < 32)
+            return true;
+    }
+
+    return false;
+}
+
 // IMPORTANT: Ensure that that s has at least max_len bytes allocated before calling this function
 internal inline void s8_insert(s8* s, u8 c, size idx, size max_len)
 {

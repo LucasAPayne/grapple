@@ -81,6 +81,32 @@ internal inline u32 get_num_projects(s8 settings_str)
     return result;
 }
 
+internal inline b32 has_valid_drive_colon(s8 s)
+{
+    b32 result = true;
+
+    u8 first = s.data[0];
+    u8 sec = s.data[1];
+    b32 has_drive = false;
+
+    if ((first >= 'A' && first <= 'Z') || (first >= 'a' && first <= 'z'))
+    {
+        if (sec == ':')
+            has_drive = true;
+    }
+
+    s8 after_drive = {s.data + 2, s.len - 2};
+    if (has_drive)
+    {
+        if (s8_contains(after_drive, ':'))
+            result = false;
+    }
+    else if (s8_contains(s, ':'))
+        result = false;
+
+    return result;
+}
+
 internal inline Project* load_projects(s8 settings_str, u32 num_projects, Arena* arena)
 {
     Project* projects = push_array(arena, num_projects, Project);
@@ -127,7 +153,25 @@ internal inline Project* load_projects(s8 settings_str, u32 num_projects, Arena*
                 {
                     s8 proj_name = s8_trim(project.left);
                     s8 proj_path = s8_trim(project.right);
-                    projects[proj_idx++] = (Project){.name=proj_name, .path=proj_path};
+
+                    // TODO(lucas): Support UNC paths
+                    b32 valid_path = !(s8_contains_any(proj_path, s8("<>\"|?*")) || !has_valid_drive_colon(proj_path) ||
+                        s8_contains_ctrl(proj_path));
+
+                    if (!valid_path)
+                    {
+                        // TODO(lucas): Make platform-independent
+                        char buf[1024];
+                        if (proj_name.len + proj_path.len < sizeof(buf))
+                        {
+                            StringCchPrintfA(buf, countof(buf), "Invalid path for project %.*s: %.*s. Paths may not "
+                            "contain '<', '>', ':', '\"', '?', '*', or any ASCII control characters.",
+                                (int)proj_name.len, (char*)proj_name.data, (int)proj_path.len, (char*)proj_path.data);
+                            MessageBoxA(0, buf, "Invalid Path", MB_OK |MB_ICONERROR);
+                        }
+                    }
+                    else
+                        projects[proj_idx++] = (Project){.name=proj_name, .path=proj_path};
                 }
             }
             else
