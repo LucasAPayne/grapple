@@ -4,3 +4,4 @@
 **/*.xcf
 build
 shaders/compiled
+config/test.ini

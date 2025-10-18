@@ -13,7 +13,11 @@ internal void renderer_destroy(Renderer* renderer);
 
 internal void renderer_set_projection(Renderer* renderer, m4 proj);
 internal void renderer_upload_texture(Renderer* renderer, Texture* texture);
-internal void renderer_draw_texture(Renderer* renderer, TextureAtlas* atlas, u32 atlas_idx, v2 pos, v2 dim);
+internal void draw_texture(Renderer* renderer, TextureAtlas* atlas, u32 atlas_idx, v2 pos, v2 dim);
+
+internal void flush_quads(Renderer* renderer);
+internal void draw_quad(Renderer* renderer, rect r, v4 color);
+internal void draw_texture(Renderer* renderer, TextureAtlas* atlas, u32 atlas_idx, v2 pos, v2 dim);
 
 internal void renderer_clear(Renderer* renderer, v4 clear_color);
 internal void renderer_begin_frame(Renderer* renderer, Window* window);

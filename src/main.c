@@ -159,7 +159,7 @@ int main(void)
 
     m4 proj = ortho_top_left((f32)window_width, (f32)window_height);
     renderer_set_projection(renderer, proj);
-    TextureAtlas atlas = texture_atlas_load_from_file("res/grapple_atlas.bmp", renderer, &arena, 2, 2, 32, 32);
+    TextureAtlas atlas = texture_atlas_load_from_file("res/grapple_atlas.bmp", renderer, &arena, 2, 2, 32, 32, 4, 4);
     renderer->atlas = &atlas;
 
     f32 font_size = text_renderer_get_font_size(renderer->text_renderer);
@@ -173,7 +173,7 @@ int main(void)
     b32 show_caret = true;
     size caret_idx = 0;
 
-    char* settings_path = "grapple.ini";
+    char* settings_path = "config/test.ini";
     size settings_size = file_get_size(settings_path);
     s8 settings_str = s8_alloc(&arena, settings_size);
     settings_str.len = settings_size;
@@ -276,6 +276,7 @@ int main(void)
         }
 
         /* Update */
+        // TODO(lucas): Only show caret when text box is focused
         caret_timer += dt;
         if (input.current_char || input.left_arrow || input.right_arrow)
         {
@@ -288,7 +289,6 @@ int main(void)
             caret_timer = 0.0f;
         }
 
-        // TODO(lucas): The caret index needs to look at the next or previous character and potentially jump multiple bytes
         if (caret_idx > 0 && input.left_arrow)
         {
             size i = caret_idx - 1;
@@ -308,21 +308,29 @@ int main(void)
         renderer_clear(renderer, clear_color);
 
         // TODO(lucas): If the text exceeds the horizontal bounds, start scrolling horizontally
+        v2 window_center = v2((f32)window->width/2.0f, (f32)window->height/2.0f);
+        v2 text_box_size = v2(200.0f, font_size+10.0f);
+        v2 icon_size = v2_full(text_box_size.y);
+
+        v2 text_box_pos = v2(window_center.x - (text_box_size.x - icon_size.x)/2.0f, window_center.y - text_box_size.y/2.0f);
+        v2 icon_pos = v2(text_box_pos.x - icon_size.x - 5.0f, text_box_pos.y);
+
         f32 padding = 2.0f;
-        rect text_box = rect(200.0f, 200.0f, 200.0f, font_size+10.0f);
+        rect text_box = rect_min_dim(text_box_pos, text_box_size);
         rect text_box_border = rect(text_box.x-1.0f, text_box.y-1.0f, text_box.w+2.0f, text_box.h+2.0f);
         rect text_bounds = rect(text_box.x+padding, text_box.y, text_box.w-padding, text_box.h);
         v2 caret_pos = text_get_cursor_position(renderer->text_renderer, buffer, text_bounds, caret_idx);
-        rect cursor = rect(caret_pos.x, caret_pos.y+2.0f, 2.0f, font_size+2.0f);
-        renderer_draw_quad(renderer, text_box_border, color_white());
-        renderer_draw_quad(renderer, text_box, clear_color);
+        rect cursor = rect(caret_pos.x, caret_pos.y+4.0f, 2.0f, font_size+2.0f);
+        draw_texture(renderer, &atlas, 1, icon_pos, icon_size);
+        draw_quad(renderer, text_box_border, color_white());
+        draw_quad(renderer, text_box, clear_color);
 
         if (show_caret)
-            renderer_draw_quad(renderer, cursor, color_white());
+            draw_quad(renderer, cursor, color_white());
 
         // Quads must be flushed before drawing text because text is drawn immediately.
-        renderer_flush_quads(renderer);
-        text_draw_rect(renderer, buffer, text_bounds, color_white());
+        flush_quads(renderer);
+        draw_text_rect(renderer, buffer, text_bounds, color_white());
 
         renderer_end_frame(renderer);
     }

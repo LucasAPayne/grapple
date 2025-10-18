@@ -25,13 +25,15 @@ typedef struct
 {
     u32 total_textures;
     u32 textures_per_row;
-    i32 tex_width;  // per sub-texture
-    i32 tex_height; // per sub-texture
-    Texture tex;    // entire atlas texture
+    i32 tex_width;     // per sub-texture
+    i32 tex_height;    // per sub-texture
+    i32 gutter_width;  // blank pixels horizontally separating sub-textures
+    i32 gutter_height; // blank pixels vertically separating sub-textures
+    Texture tex;       // entire atlas texture
 } TextureAtlas;
 
 Texture load_bmp_from_memory(u8* data, size data_size);
 Texture load_bmp_from_file(char* filename, Arena* arena);
 TextureAtlas texture_atlas_load_from_file(char* filename, Renderer* renderer, Arena* arena, u32 total_textures,
-    u32 textures_per_row, i32 tex_width, i32 tex_height);
-rect texture_atlas_uv_from_index(TextureAtlas* atlas, u32 idx);
+    u32 textures_per_row, i32 tex_width, i32 tex_height, i32 gutter_width, i32 gutter_height);
+rect texture_atlas_uv_from_index(TextureAtlas* atlas, u32 idx); // UV coordinates are given from texel centers

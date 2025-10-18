@@ -51,7 +51,7 @@ extern "C" TextRenderer* text_renderer_create(void* window_ptr, IDXGISwapChain* 
 
     HR(tr->render_target->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &tr->brush));
 
-    tr->font_size = 16.0f;
+    tr->font_size = 18.0f;
     IDWriteFactory* dwrite_factory = NULL;
     HR(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&dwrite_factory));
     HR(dwrite_factory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,
@@ -101,7 +101,7 @@ extern "C" v2 text_get_cursor_position(TextRenderer* tr, s8 text, rect bounds, s
     return v2(bounds.x + x, bounds.y + y);
 }
 
-extern "C" void text_draw_rect(Renderer* renderer, s8 text, rect bounds, v4 color)
+extern "C" void draw_text_rect(Renderer* renderer, s8 text, rect bounds, v4 color)
 {
     if (text.len <= 0) return;
 
@@ -122,7 +122,7 @@ extern "C" void text_draw_rect(Renderer* renderer, s8 text, rect bounds, v4 colo
     arena_pop(&tr->scratch_arena, text.len*sizeof(u8));
 }
 
-extern "C" void text_draw(Renderer* renderer, s8 text, v2 pos, v2 dim, v4 color)
+extern "C" void draw_text(Renderer* renderer, s8 text, v2 pos, v2 dim, v4 color)
 {
-    text_draw_rect(renderer, text, rect_min_dim(pos, dim), color);
+    draw_text_rect(renderer, text, rect_min_dim(pos, dim), color);
 }

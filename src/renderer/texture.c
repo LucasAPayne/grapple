@@ -207,13 +207,15 @@ Texture texture_load_from_file(char* filename, Renderer* renderer, Arena* arena)
 }
 
 TextureAtlas texture_atlas_load_from_file(char* filename, Renderer* renderer, Arena* arena, u32 total_textures,
-    u32 textures_per_row, i32 tex_width, i32 tex_height)
+    u32 textures_per_row, i32 tex_width, i32 tex_height, i32 gutter_width, i32 gutter_height)
 {
     TextureAtlas result = {0};
     result.total_textures = total_textures;
     result.textures_per_row = textures_per_row;
     result.tex_width = tex_width;
     result.tex_height = tex_height;
+    result.gutter_width = gutter_width;
+    result.gutter_height = gutter_height;
     result.tex = texture_load_from_file(filename, renderer, arena);
 
     return result;
@@ -223,20 +225,23 @@ rect texture_atlas_uv_from_index(TextureAtlas* atlas, u32 idx)
 {
     rect result = {0};
 
-    u32 rows = (atlas->total_textures + atlas->textures_per_row - 1) / atlas->textures_per_row;
-    i32 total_w = atlas->tex_width*atlas->textures_per_row;
-    i32 total_h = atlas->tex_height*rows;
+    if (atlas->textures_per_row <= 0)
+        return result;
 
+    u32 rows = (atlas->total_textures + atlas->textures_per_row - 1) / atlas->textures_per_row;
+    i32 total_w = max(1, atlas->tex_width*atlas->textures_per_row + atlas->gutter_width*(atlas->textures_per_row-1));
+    i32 total_h = max(1, atlas->tex_height*rows + atlas->gutter_height*(rows-1));
+
+    u32 col = idx % atlas->textures_per_row;
     u32 row = idx / atlas->textures_per_row;
 
-    i32 x = idx*atlas->tex_width % total_w;
-    i32 y = row*atlas->tex_height;
+    i32 x = col * (atlas->tex_width + atlas->gutter_width);
+    i32 y = row * (atlas->tex_height + atlas->gutter_height);
 
-    result.x = (f32)x / (f32)total_w;
-    result.y = (f32)y / (f32)total_h;
-    result.w = (f32)atlas->tex_width / total_w;
-    result.h = (f32)atlas->tex_height / total_h;
+    result.x = ((f32)x + 0.5f) / (f32)total_w;
+    result.y = ((f32)y + 0.5f) / (f32)total_h;
+    result.w = ((f32)atlas->tex_width - 1.0f) / total_w;
+    result.h = ((f32)atlas->tex_height - 1.0f) / total_h;
 
     return result;
 }
-
