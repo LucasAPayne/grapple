@@ -10,9 +10,10 @@ if /i "%1" EQU "debug" (
 )
 
 @rem /Oi generates intrinsic functions
-@rem /Fc displays the full path to files in error messages
+@rem /FC displays the full path to files in error messages
 @rem /wd4201 disables the warning about nameless structs/unions
-set common_flags=/nologo /Oi /FC /WX /W4 /wd4201 /wd4505
+@REM /we5262: Treat implicit fallthrough as an error
+set common_flags=/nologo /Oi /FC /WX /W4 /we5262 /wd4201 /wd4505
 set output_names=/Fograpple.obj /Fegrapple.exe /Fmgrapple.map
 set common_defs=/D_CRT_SECURE_NO_WARNINGS /DVC_EXTRALEAN /DWIN32_LEAN_AND_MEAN /DNOMINMAX /DGRAPPLE_WIN32
 
@@ -23,7 +24,7 @@ set debug_flags=/DGRAPPLE_DEBUG /Zi /Od /MTd
 set release_flags=/O2
 
 set linker_flags=/link /opt:ref /incremental:no /subsystem:windows /entry:mainCRTStartup
-set libs=kernel32.lib user32.lib d3d11.lib dxgi.lib dxguid.lib d2d1.lib dwrite.lib
+set libs=kernel32.lib user32.lib shell32.lib d3d11.lib dxgi.lib dxguid.lib d2d1.lib dwrite.lib font.lib
 
 if "%is_debug%"=="1" (
     set compiler_flags=%common_flags% %common_defs% %debug_flags%
@@ -53,5 +54,5 @@ if not exist build mkdir build
 pushd build
 cl %compiler_flags% /c /I..\src ..\src\renderer\d3d11\d3d11_font.cpp
 lib /nologo /out:font.lib d3d11_font.obj
-cl %compiler_flags% /I.. /I..\src ..\src\main.c %output_names% %linker_flags% %libs% font.lib
+cl %compiler_flags% /I.. /I..\src ..\src\main.c %output_names% %linker_flags% %libs%
 popd

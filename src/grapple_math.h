@@ -9,10 +9,12 @@
     #define v2(x, y) {(x), (y)}
     #define v3(x, y, z) {(x), (y), (z)}
     #define v4(x, y, z, w) {(x), (y), (z), (w)}
+    #define rect(x, y, w, h) {(x), (y), (w), (h)}
 #else
     #define v2(x, y) (v2){(x), (y)}
     #define v3(x, y, z) (v3){(x), (y), (z)}
     #define v4(x, y, z, w) (v4){(x), (y), (z), (w)}
+    #define rect(x, y, w, h) (rect){(x), (y), (w), (h)}
 #endif
 typedef union
 {
@@ -85,13 +87,21 @@ typedef struct
 
 typedef struct
 {
-    v2 min;
-    v2 max;
+    f32 x;
+    f32 y;
+    f32 w;
+    f32 h;
 } rect;
 
 //
 // NOTE(lucas): Scalar operations
 //
+
+internal inline f32 abs_f32(f32 x)
+{
+    f32 result = fabsf(x);
+    return result;
+}
 
 internal inline f32 sq_f32(f32 x)
 {
@@ -204,20 +214,24 @@ internal m4 m4_transpose(m4 mat)
 
 internal inline rect rect_min_max(v2 min, v2 max)
 {
-    rect result = {0};
+    rect r = {0};
 
-    result.min = min;
-    result.max = max;
+    r.x = min.x;
+    r.y = min.y;
+    r.w = abs_f32(max.x - min.x);
+    r.h = abs_f32(max.y - min.y);
 
-    return result;
+    return r;
 }
 
 internal inline rect rect_min_dim(v2 min, v2 dim)
 {
     rect result = {0};
 
-    result.min = min;
-    result.max = v2_add(min, dim);
+    result.x = min.x;
+    result.y = min.y;
+    result.w = dim.x;
+    result.h = dim.y;
 
     return result;
 }

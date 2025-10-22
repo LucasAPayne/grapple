@@ -59,7 +59,6 @@ void* file_open(char* filename, FileMode mode)
         creation_disposition = CREATE_NEW;
 
     HANDLE file = CreateFileA(filename, file_access, file_share, NULL, creation_disposition, FILE_ATTRIBUTE_NORMAL, NULL);
-    ASSERT(file != INVALID_HANDLE_VALUE, "CreateFileA failed");
     if (file == INVALID_HANDLE_VALUE)
     {
         win32_error_callback();
@@ -73,7 +72,6 @@ void file_close(void* file_handle)
 {
     // TODO(lucas): For any failure to operate on a file, make sure to log the filename.
     BOOL closed = CloseHandle(file_handle);
-    ASSERT(closed, "Failed to close file");
     if (closed == FALSE)
     {
         // TODO(lucas): Handle error

@@ -1,5 +1,7 @@
 .vs
 .vscode
 **/*.rdbg
+**/*.xcf
 build
 shaders/compiled
+config/test.ini

@@ -13,14 +13,18 @@ internal void renderer_destroy(Renderer* renderer);
 
 internal void renderer_set_projection(Renderer* renderer, m4 proj);
 internal void renderer_upload_texture(Renderer* renderer, Texture* texture);
-internal void renderer_draw_texture(Renderer* renderer, Texture* texture, v2 pos, v2 dim);
+internal void draw_texture(Renderer* renderer, TextureAtlas* atlas, u32 atlas_idx, v2 pos, v2 dim);
+
+internal void flush_quads(Renderer* renderer);
+internal void draw_quad(Renderer* renderer, rect r, v4 color);
+internal void draw_texture(Renderer* renderer, TextureAtlas* atlas, u32 atlas_idx, v2 pos, v2 dim);
 
 internal void renderer_clear(Renderer* renderer, v4 clear_color);
 internal void renderer_begin_frame(Renderer* renderer, Window* window);
 internal void renderer_end_frame(Renderer* renderer);
 
-internal inline v4 color_red(void)    {return (v4){1.0f, 0.0f, 0.0f, 1.0f};}
-internal inline v4 color_green(void)  {return (v4){0.0f, 1.0f, 0.0f, 1.0f};}
-internal inline v4 color_blue(void)   {return (v4){0.0f, 0.0f, 1.0f, 1.0f};}
-internal inline v4 color_black(void)  {return (v4){0.0f, 0.0f, 0.0f, 1.0f};}
-internal inline v4 color_white(void)  {return (v4){1.0f, 1.0f, 1.0f, 1.0f};}
+internal inline v4 color_red(void)    {return v4(1.0f, 0.0f, 0.0f, 1.0f);}
+internal inline v4 color_green(void)  {return v4(0.0f, 1.0f, 0.0f, 1.0f);}
+internal inline v4 color_blue(void)   {return v4(0.0f, 0.0f, 1.0f, 1.0f);}
+internal inline v4 color_black(void)  {return v4(0.0f, 0.0f, 0.0f, 1.0f);}
+internal inline v4 color_white(void)  {return v4(1.0f, 1.0f, 1.0f, 1.0f);}

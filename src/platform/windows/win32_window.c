@@ -3,6 +3,7 @@
 #include "win32_base.h"
 
 #include <windows.h>
+#include <shellapi.h>
 
 global HICON global_window_icon;
 
@@ -68,13 +69,6 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
             // Don't chime when Alt+Enter is pressed
             result = MAKELRESULT(0, MNC_CLOSE);
         } break;
-
-        // case WM_SYSKEYDOWN:
-        // case WM_SYSKEYUP:
-        // case WM_KEYDOWN:
-        // {
-        //     ASSERT(0, "Keyboard input came in through a non-dispatch message!");
-        // } break;
 
         /*
         All message types that are not explicitly handled will end up here. DefWindowProc just provides default
@@ -155,4 +149,11 @@ void window_icon_set_from_resource(int id)
 {
     global_window_icon = (HICON)LoadImageA(GetModuleHandleA(0), MAKEINTRESOURCEA(id), IMAGE_ICON,
                                            0, 0, LR_DEFAULTSIZE|LR_SHARED);
+}
+
+void open_vs_code(char* proj_path)
+{
+    HINSTANCE result = ShellExecuteA(NULL, "open", "code", proj_path, proj_path, SW_HIDE);
+    if ((INT_PTR)result <= 32)
+        win32_error_callback();
 }

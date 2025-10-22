@@ -36,6 +36,8 @@ internal Renderer* renderer_create(Window* window, Arena* arena)
         ExitProcess(1);
     }
 
+    ID3D11Device* device = renderer->device;
+
     DXGI_SWAP_CHAIN_DESC sd = {0};
     sd.BufferDesc.Width = window->width;
     sd.BufferDesc.Height = window->height;
@@ -58,18 +60,17 @@ internal Renderer* renderer_create(Window* window, Arena* arena)
     IDXGIDevice* dxgi_device = NULL;
     IDXGIAdapter* dxgi_adapter = NULL;
     IDXGIFactory* dxgi_factory = NULL;
-    HR(renderer->device->lpVtbl->QueryInterface(renderer->device, &IID_IDXGIDevice, (void**)(&dxgi_device)));
+    HR(device->lpVtbl->QueryInterface(device, &IID_IDXGIDevice, (void**)(&dxgi_device)));
     HR(dxgi_device->lpVtbl->GetParent(dxgi_device, &IID_IDXGIAdapter, (void**)(&dxgi_adapter)));
     HR(dxgi_adapter->lpVtbl->GetParent(dxgi_adapter, &IID_IDXGIFactory, (void**)(&dxgi_factory)));
-    HR(dxgi_factory->lpVtbl->CreateSwapChain(dxgi_factory, (IUnknown*)renderer->device, &sd, &renderer->swap_chain));
+    HR(dxgi_factory->lpVtbl->CreateSwapChain(dxgi_factory, (IUnknown*)device, &sd, &renderer->swap_chain));
     com_release(dxgi_device);
     com_release(dxgi_adapter);
     com_release(dxgi_factory);
 
     ID3D11Texture2D* back_buffer = 0;
     HR(renderer->swap_chain->lpVtbl->GetBuffer(renderer->swap_chain, 0, &IID_ID3D11Texture2D, (void**)(&back_buffer)));
-    HR(renderer->device->lpVtbl->CreateRenderTargetView(renderer->device, (ID3D11Resource*)back_buffer, NULL,
-       &renderer->render_target_view));
+    HR(device->lpVtbl->CreateRenderTargetView(device, (ID3D11Resource*)back_buffer, NULL, &renderer->render_target_view));
     com_release(back_buffer);
     renderer->ctx->lpVtbl->OMSetRenderTargets(renderer->ctx, 1, &renderer->render_target_view, NULL);
 
@@ -82,17 +83,16 @@ internal Renderer* renderer_create(Window* window, Arena* arena)
     vp.MaxDepth = 1.0f;
     renderer->ctx->lpVtbl->RSSetViewports(renderer->ctx, 1, &vp);
 
-    HR(renderer->device->lpVtbl->CreateVertexShader(renderer->device, d3d11_vshader, sizeof(d3d11_vshader), NULL,
-                                                    &renderer->vertex_shader));
-    HR(renderer->device->lpVtbl->CreatePixelShader(renderer->device, d3d11_pshader, sizeof(d3d11_pshader), NULL,
-                                                   &renderer->pixel_shader));
+    HR(device->lpVtbl->CreateVertexShader(device, d3d11_vshader, sizeof(d3d11_vshader), NULL, &renderer->vertex_shader));
+    HR(device->lpVtbl->CreatePixelShader(device, d3d11_pshader, sizeof(d3d11_pshader), NULL, &renderer->pixel_shader));
 
     D3D11_INPUT_ELEMENT_DESC layout[] =
     {
-        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Vertex, pos),        D3D11_INPUT_PER_VERTEX_DATA, 0},
-        {"TEXCOORD",  0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(Vertex, tex_coord), D3D11_INPUT_PER_VERTEX_DATA, 0}
+        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex, pos),       D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT,       0, offsetof(Vertex, tex_coord), D3D11_INPUT_PER_VERTEX_DATA, 0},
+        {"COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(Vertex, color),     D3D11_INPUT_PER_VERTEX_DATA, 0}
     };
-    HR(renderer->device->lpVtbl->CreateInputLayout(renderer->device, layout, countof(layout), d3d11_vshader,
+    HR(device->lpVtbl->CreateInputLayout(device, layout, countof(layout), d3d11_vshader,
        sizeof(d3d11_vshader), &renderer->input_layout));
 
     renderer->quads_per_batch = 1024;
@@ -107,7 +107,7 @@ internal Renderer* renderer_create(Window* window, Arena* arena)
     vb_desc.Usage = D3D11_USAGE_DYNAMIC;
     vb_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
     vb_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    HR(renderer->device->lpVtbl->CreateBuffer(renderer->device, &vb_desc, NULL, &renderer->vb));
+    HR(device->lpVtbl->CreateBuffer(device, &vb_desc, NULL, &renderer->vb));
 
     for (i16 i = 0; i < renderer->quads_per_batch; ++i)
     {
@@ -127,16 +127,18 @@ internal Renderer* renderer_create(Window* window, Arena* arena)
 
     D3D11_SUBRESOURCE_DATA iinit_data = {0};
     iinit_data.pSysMem = renderer->cpu_ib;
-    HR(renderer->device->lpVtbl->CreateBuffer(renderer->device, &ib_desc, &iinit_data, &renderer->ib));
+    HR(device->lpVtbl->CreateBuffer(device, &ib_desc, &iinit_data, &renderer->ib));
 
+    // TODO(lucas): Linear filtering is causing smudges from sampler bleeding, even after adding gutters between each
+    // atlas subtexture
     D3D11_SAMPLER_DESC sampler_desc = {0};
-    sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_POINT;
-    sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_WRAP;
-    sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_WRAP;
-    sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_WRAP;
+    sampler_desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+    sampler_desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampler_desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+    sampler_desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
     sampler_desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
     sampler_desc.MaxLOD = D3D11_FLOAT32_MAX;
-    HR(renderer->device->lpVtbl->CreateSamplerState(renderer->device, &sampler_desc, &renderer->sampler_state));
+    HR(device->lpVtbl->CreateSamplerState(device, &sampler_desc, &renderer->sampler_state));
 
     D3D11_BLEND_DESC transparent_desc = {0};
     transparent_desc.AlphaToCoverageEnable = FALSE;
@@ -149,14 +151,14 @@ internal Renderer* renderer_create(Window* window, Arena* arena)
     transparent_desc.RenderTarget[0].DestBlendAlpha        = D3D11_BLEND_INV_SRC_ALPHA;
     transparent_desc.RenderTarget[0].BlendOpAlpha          = D3D11_BLEND_OP_ADD;
     transparent_desc.RenderTarget[0].RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
-    HR(renderer->device->lpVtbl->CreateBlendState(renderer->device, &transparent_desc, &renderer->blend_state));
+    HR(device->lpVtbl->CreateBlendState(device, &transparent_desc, &renderer->blend_state));
 
     D3D11_BUFFER_DESC proj_desc = {0};
     proj_desc.ByteWidth = sizeof(m4);
     proj_desc.Usage = D3D11_USAGE_DYNAMIC;
     proj_desc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
     proj_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-    HR(renderer->device->lpVtbl->CreateBuffer(renderer->device, &proj_desc, NULL, &renderer->proj_buffer));
+    HR(device->lpVtbl->CreateBuffer(device, &proj_desc, NULL, &renderer->proj_buffer));
     renderer->proj = ortho_top_left((f32)window->width, (f32)window->height);
     renderer_set_projection(renderer, renderer->proj);
 
@@ -230,7 +232,7 @@ internal void renderer_upload_texture(Renderer* renderer, Texture* texture)
     com_release(d3d_tex);
 }
 
-internal void renderer_flush_quads(Renderer* renderer)
+internal void flush_quads(Renderer* renderer)
 {
     if (renderer->quads_in_batch == 0) return;
 
@@ -252,8 +254,7 @@ internal void renderer_flush_quads(Renderer* renderer)
     renderer->ctx->lpVtbl->PSSetShader(renderer->ctx, renderer->pixel_shader, NULL, 0);
     renderer->ctx->lpVtbl->OMSetBlendState(renderer->ctx, renderer->blend_state, NULL, 0xffffffff);
 
-    // TODO(lucas): Texture atlas
-    ID3D11ShaderResourceView* texture_srv = renderer->current_texture->api_handle;
+    ID3D11ShaderResourceView* texture_srv = renderer->atlas->tex.api_handle;
     renderer->ctx->lpVtbl->PSSetSamplers(renderer->ctx, 0, 1, &renderer->sampler_state);
     renderer->ctx->lpVtbl->PSSetShaderResources(renderer->ctx, 0, 1, &texture_srv);
 
@@ -262,25 +263,45 @@ internal void renderer_flush_quads(Renderer* renderer)
     renderer->quads_in_batch = 0;
 }
 
-internal void renderer_draw_texture(Renderer* renderer, Texture* texture, v2 pos, v2 dim)
+internal void draw_quad(Renderer* renderer, rect r, v4 color)
 {
+    rect uv = texture_atlas_uv_from_index(renderer->atlas, 0);
+    Vertex* verts = renderer->cpu_vb + renderer->quads_in_batch*4;
+    verts[0] = (Vertex){ v2(r.x,       r.y),       v2(uv.x, uv.y + uv.h),        color };
+    verts[1] = (Vertex){ v2(r.x + r.w, r.y),       v2(uv.x + uv.w, uv.y + uv.h), color };
+    verts[2] = (Vertex){ v2(r.x,       r.y + r.h), v2(uv.x, uv.y),               color };
+    verts[3] = (Vertex){ v2(r.x + r.w, r.y + r.h), v2(uv.x + uv.w, uv.y),        color };
+
     ++renderer->quads_in_batch;
     ++renderer->total_quads;
-    Texture* old_texture = texture;
-    renderer->current_texture = texture;
 
-    if (renderer->quads_in_batch >= renderer->quads_per_batch || texture != old_texture)
-        renderer_flush_quads(renderer);
+    if (renderer->quads_in_batch >= renderer->quads_per_batch)
+        flush_quads(renderer);
+}
+
+internal void draw_texture(Renderer* renderer, TextureAtlas* atlas, u32 atlas_idx, v2 pos, v2 dim)
+{
+    if (!renderer->atlas)
+        renderer->atlas = atlas;
 
     f32 x = pos.x;
     f32 y = pos.y;
     f32 w = dim.x;
     f32 h = dim.y;
+
+    rect uv = texture_atlas_uv_from_index(atlas, atlas_idx);
+
     Vertex* verts = renderer->cpu_vb + renderer->quads_in_batch*4;
-    verts[0] = (Vertex){ pos,              v2(0.0f, 1.0f) };
-    verts[1] = (Vertex){ v2(x + w, y),     v2(1.0f, 1.0f) };
-    verts[2] = (Vertex){ v2(x,     y + h), v2(0.0f, 0.0f) };
-    verts[3] = (Vertex){ v2(x + w, y + h), v2(1.0f, 0.0f) };
+    verts[0] = (Vertex){pos,              v2(uv.x, uv.y + uv.h),        color_white()};
+    verts[1] = (Vertex){v2(x + w, y),     v2(uv.x + uv.w, uv.y + uv.h), color_white()};
+    verts[2] = (Vertex){v2(x,     y + h), v2(uv.x, uv.y),               color_white()};
+    verts[3] = (Vertex){v2(x + w, y + h), v2(uv.x + uv.w, uv.y),        color_white()};
+
+    ++renderer->quads_in_batch;
+    ++renderer->total_quads;
+
+    if (renderer->quads_in_batch >= renderer->quads_per_batch)
+        flush_quads(renderer);
 }
 
 internal void renderer_clear(Renderer* renderer, v4 clear_color)
@@ -300,6 +321,6 @@ internal void renderer_begin_frame(Renderer* renderer, Window* window)
 
 internal void renderer_end_frame(Renderer* renderer)
 {
-    renderer_flush_quads(renderer);
+    flush_quads(renderer);
     HR(renderer->swap_chain->lpVtbl->Present(renderer->swap_chain, 1, 0));
 }
