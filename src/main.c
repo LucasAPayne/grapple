@@ -191,8 +191,8 @@ internal inline Project* load_projects(s8 settings_str, u32 num_projects, Arena*
 
 int main(void)
 {
-    int window_width = 800;
-    int window_height = 600;
+    int window_width = 300;
+    int window_height = 40;
     Window* window = window_create("Grapple", window_width, window_height);
     Input input = {0};
 
@@ -352,17 +352,18 @@ int main(void)
         v4 clear_color = v4(0.125f, 0.125f, 0.125f, 1.0f);
         renderer_clear(renderer, clear_color);
 
-        v2 window_center = v2((f32)window->width/2.0f, (f32)window->height/2.0f);
-        v2 text_box_size = v2(200.0f, font_size+10.0f);
-        v2 icon_size = v2_full(text_box_size.y);
+        v2 icon_size = v2_full((f32)window->height);
+        f32 sep = 4.0f;
+        v2 text_box_size = v2((f32)window->width - icon_size.x-sep-2.0f, (f32)window->height-2.0f);
 
-        v2 text_box_pos = v2(window_center.x - (text_box_size.x - icon_size.x)/2.0f, window_center.y - text_box_size.y/2.0f);
-        v2 icon_pos = v2(text_box_pos.x - icon_size.x - 5.0f, text_box_pos.y);
+        v2 icon_pos = v2_zero();
+        v2 text_box_pos = v2(icon_size.x+sep+1.0f, 1.0f);
 
         f32 padding = 4.0f;
+        f32 vert_padding = 2.0f;
         rect text_box = rect_min_dim(text_box_pos, text_box_size);
         rect text_box_border = rect(text_box.x-1.0f, text_box.y-1.0f, text_box.w+2.0f, text_box.h+2.0f);
-        rect text_bounds = rect(text_box.x+padding, text_box.y, text_box.w-padding, text_box.h);
+        rect text_bounds = rect(text_box.x+padding, text_box.y+vert_padding, text_box.w-padding, text_box.h+vert_padding);
         TextMetrics metrics =  text_get_metrics(renderer->text_renderer, buffer, text_bounds, caret_idx);
 
         f32 scroll = 0.0f;

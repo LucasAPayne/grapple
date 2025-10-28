@@ -108,17 +108,15 @@ Window* window_create(const char* title, int width, int height)
     if (!RegisterClassExA(&window_class))
         win32_error_callback();
 
-    RECT initial_window_rect = {0, 0, width, height};
-    if (!AdjustWindowRectEx(&initial_window_rect, WS_OVERLAPPEDWINDOW, FALSE, WS_EX_OVERLAPPEDWINDOW))
-        win32_error_callback();
+    int monitor_width = GetSystemMetrics(SM_CXSCREEN);
+    int monitor_height = GetSystemMetrics(SM_CYSCREEN);
+    int wnd_x = (monitor_width - width) / 2;
+    int wnd_y = (monitor_height - height) / 4;
 
-    LONG initial_window_width = initial_window_rect.right - initial_window_rect.left;
-    LONG initial_window_height = initial_window_rect.bottom - initial_window_rect.top;
-
-    HWND hwnd = CreateWindowExA(
-        WS_EX_OVERLAPPEDWINDOW, window_class.lpszClassName, title, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-        CW_USEDEFAULT, CW_USEDEFAULT, initial_window_width,  initial_window_height, 0, 0, instance, 0
-    );
+    // Make the window render on top of everything (topmost) and not appear in the taskbar (toolwindow)
+    DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
+    HWND hwnd = CreateWindowExA(ex_style, window_class.lpszClassName, title, WS_VISIBLE | WS_POPUP,
+        wnd_x, wnd_y, width, height, 0, 0, instance, 0);
 
     if(!hwnd)
         win32_error_callback();
