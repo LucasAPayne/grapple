@@ -15,3 +15,14 @@ typedef struct
 
     void* ptr; // OS handle to window
 } Window;
+
+Window* window_create(const char* title, int width, int height);
+
+void window_show(Window* window);
+void window_hide(Window* window);
+
+void* window_icon_load_from_file(const char* filename);
+void window_icon_set_from_memory(Window* window, void* icon);
+void window_icon_set_from_resource(int id);
+
+void open_vs_code(char* proj_path);

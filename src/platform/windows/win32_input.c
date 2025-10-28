@@ -31,6 +31,7 @@ void input_process(Window* window, Input* input)
                     case VK_LEFT:   input->left_arrow = true;  break;
                     case VK_RIGHT:  input->right_arrow = true; break;
                     case VK_DELETE: input->del = true;         break;
+                    case VK_ESCAPE: window_hide(window);       break;
                     default: break;
                 }
 

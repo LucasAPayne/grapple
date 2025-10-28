@@ -277,8 +277,11 @@ int main(void)
                     {
                         open_project(project.path, &scratch_arena);
 
-                        // TODO(lucas): Return to system tray
-                        return 0;
+                        // Clear the text box so that when the window is opened again, the old text will be gone.
+                        buffer.len = 0;
+                        caret_idx = 0;
+
+                        window_hide(window);
                     }
                 }
             }

@@ -5,7 +5,16 @@
 #include <windows.h>
 #include <shellapi.h>
 
+#define WM_TRAYICON (WM_USER + 1)
+#define TRAY_MENU_SHOW 1001
+#define TRAY_MENU_EXIT 1002
+
+#define HK_OPEN 1
+
 global HICON global_window_icon;
+
+global NOTIFYICONDATAA global_nid;
+global HMENU global_tray_menu;
 
 internal inline i64 win32_get_ticks(void)
 {
@@ -34,9 +43,25 @@ f32 get_frame_seconds(Window* window)
     return seconds_elapsed;
 }
 
+void window_show(Window* window)
+{
+    // Show the window, put it on top, and direct keyboard input to it
+    HWND hwnd = window->ptr;
+    ShowWindow(hwnd, SW_SHOW);
+    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    SetForegroundWindow(hwnd);
+}
+
+void window_hide(Window* window)
+{
+    HWND hwnd = window->ptr;
+    ShowWindow(hwnd, SW_HIDE);
+}
+
 internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     LRESULT result = 0;
+    Window* window = (Window*)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
 
     switch(msg)
     {
@@ -45,7 +70,6 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
         */
         case WM_CLOSE:
         {
-            Window* window = (Window*)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
             if (window)
                 window->open = false;
 
@@ -57,9 +81,14 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
         */
         case WM_DESTROY:
         {
-            Window* window = (Window*)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
             if (window)
                 window->open = false;
+
+            // Clean up system tray resources
+            UnregisterHotKey(hwnd, HK_OPEN);
+            Shell_NotifyIconA(NIM_DELETE, &global_nid);
+            if (global_tray_menu)
+                DestroyMenu(global_tray_menu);
 
             PostQuitMessage(0);
         } break;
@@ -68,6 +97,43 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
         {
             // Don't chime when Alt+Enter is pressed
             result = MAKELRESULT(0, MNC_CLOSE);
+        } break;
+
+        case WM_TRAYICON:
+        {
+            if (LOWORD(lparam) == WM_LBUTTONDBLCLK)
+                window_show(window);
+            else if (LOWORD(lparam) == WM_RBUTTONUP)
+            {
+                POINT pt;
+                GetCursorPos(&pt);
+                SetForegroundWindow(hwnd);
+                TrackPopupMenu(global_tray_menu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hwnd, NULL);
+                PostMessageA(hwnd, WM_NULL, 0, 0);
+            }
+        } break;
+
+        case WM_COMMAND:
+        {
+            if (LOWORD(wparam) == TRAY_MENU_SHOW)
+                window_show(window);
+            else if (LOWORD(wparam) == TRAY_MENU_EXIT)
+                DestroyWindow(hwnd);
+        } break;
+
+        case WM_HOTKEY:
+        {
+            if (wparam == HK_OPEN)
+                window_show(window);
+        }
+
+        case WM_KILLFOCUS:
+        case WM_ACTIVATE:
+        {
+            // Open the window hidden, and hide it when it loses focus.
+            // NOTE(lucas): Calling window_hide here doesn't work, so call ShowWindow expclicitly
+            if (LOWORD(lparam) == WA_INACTIVE)
+                ShowWindow(hwnd, SW_HIDE);
         } break;
 
         /*
@@ -126,6 +192,23 @@ Window* window_create(const char* title, int width, int height)
 
     // Associate window data with the window ptr
     SetWindowLongPtrA(hwnd, GWLP_USERDATA, (LONG_PTR)window);
+
+    // Set up system tray icon and pop-up menu
+    global_nid.cbSize = sizeof(NOTIFYICONDATAA);
+    global_nid.hWnd = hwnd;
+    global_nid.uID = 1;
+    global_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    global_nid.uCallbackMessage = WM_TRAYICON;
+    global_nid.hIcon = LoadIconA(NULL, IDI_APPLICATION);
+    lstrcpyA(global_nid.szTip, "Grapple");
+
+    Shell_NotifyIconA(NIM_ADD, &global_nid);
+
+    global_tray_menu =  CreatePopupMenu();
+    AppendMenuA(global_tray_menu, MF_STRING, TRAY_MENU_SHOW, "Show");
+    AppendMenuA(global_tray_menu, MF_STRING, TRAY_MENU_EXIT, "Exit");
+
+    RegisterHotKey(hwnd, HK_OPEN, MOD_CONTROL | MOD_SHIFT, ' ');
 
     return window;
 }
