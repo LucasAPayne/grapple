@@ -173,6 +173,13 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
 
 Window* window_create(const char* title, int width, int height)
 {
+    char* wnd_class = "GrappleWindow";
+
+    // If an instance of the app is already running, just return a null pointer.
+    HWND hwnd_prev = FindWindowA(wnd_class, NULL);
+    if (hwnd_prev)
+        return NULL;
+
     Window* window = (Window*)VirtualAllocEx(GetCurrentProcess(), NULL, sizeof(Window), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 
     window->width = width;
@@ -189,7 +196,7 @@ Window* window_create(const char* title, int width, int height)
     window_class.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
     window_class.lpfnWndProc = &win32_main_window_callback;
     window_class.hInstance = instance;
-    window_class.lpszClassName = "GrappleWindow";
+    window_class.lpszClassName = wnd_class;
     window_class.hCursor = LoadCursorA(NULL, IDC_ARROW);
     window_class.hIcon = LoadIconA(0, IDI_APPLICATION);
 

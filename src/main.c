@@ -194,6 +194,9 @@ int main(void)
     int window_width = 300;
     int window_height = 40;
     Window* window = window_create("Grapple", window_width, window_height);
+    if (!window)
+        return -1;
+
     Input input = {0};
 
     Arena arena = arena_alloc(MEGABYTES(10));
