@@ -15,6 +15,7 @@ global HICON global_window_icon;
 
 global NOTIFYICONDATAA global_nid;
 global HMENU global_tray_menu;
+global b32 global_restoring; // Guards against flicker when restoring window
 
 internal inline i64 win32_get_ticks(void)
 {
@@ -43,13 +44,34 @@ f32 get_frame_seconds(Window* window)
     return seconds_elapsed;
 }
 
+internal void window_move_to_current_monitor(Window* window)
+{
+    HWND focused_window = GetForegroundWindow();
+    HMONITOR monitor = MonitorFromWindow(focused_window, MONITOR_DEFAULTTONEAREST);
+
+    MONITORINFO mi = {0};
+    mi.cbSize = sizeof(MONITORINFO);
+    if (GetMonitorInfoA(monitor, &mi))
+    {
+        RECT rc = mi.rcMonitor;
+        int monitor_width = rc.right - rc.left;
+        int monitor_height = rc.bottom - rc.top;
+
+        // Monitors exist in one coordinate space, so add the monitor's x-coordinate
+        int x = rc.left + (monitor_width - window->width) / 2;
+        int y = (monitor_height - window->height) / 4;
+
+        SetWindowPos(window->ptr, HWND_TOP, x, y, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
+    }
+}
+
 void window_show(Window* window)
 {
     // Show the window, put it on top, and direct keyboard input to it
-    HWND hwnd = window->ptr;
-    ShowWindow(hwnd, SW_SHOW);
-    SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
-    SetForegroundWindow(hwnd);
+    global_restoring = true;
+    window_move_to_current_monitor(window);
+    SetForegroundWindow(window->ptr);
+    global_restoring = false;
 }
 
 void window_hide(Window* window)
@@ -132,7 +154,7 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
         {
             // Open the window hidden, and hide it when it loses focus.
             // NOTE(lucas): Calling window_hide here doesn't work, so call ShowWindow expclicitly
-            if (LOWORD(lparam) == WA_INACTIVE)
+            if (LOWORD(lparam) == WA_INACTIVE && !global_restoring)
                 ShowWindow(hwnd, SW_HIDE);
         } break;
 
@@ -174,15 +196,10 @@ Window* window_create(const char* title, int width, int height)
     if (!RegisterClassExA(&window_class))
         win32_error_callback();
 
-    int monitor_width = GetSystemMetrics(SM_CXSCREEN);
-    int monitor_height = GetSystemMetrics(SM_CYSCREEN);
-    int wnd_x = (monitor_width - width) / 2;
-    int wnd_y = (monitor_height - height) / 4;
-
     // Make the window render on top of everything (topmost) and not appear in the taskbar (toolwindow)
     DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
     HWND hwnd = CreateWindowExA(ex_style, window_class.lpszClassName, title, WS_VISIBLE | WS_POPUP,
-        wnd_x, wnd_y, width, height, 0, 0, instance, 0);
+        0, 0, width, height, 0, 0, instance, 0);
 
     if(!hwnd)
         win32_error_callback();
