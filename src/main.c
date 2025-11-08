@@ -358,19 +358,23 @@ int main(void)
         v4 clear_color = v4(0.125f, 0.125f, 0.125f, 1.0f);
         renderer_clear(renderer, clear_color);
 
-        v2 icon_size = v2_full((f32)window->height);
+        // TODO(lucas): Organize this mess into a reasonable style spec
+        f32 padding = 4.0f;
+        f32 vert_padding = 5.0f;
+        rect window_border = rect(1.0f, 1.0f, (f32)window->width-2.0f, (f32)window->height-2.0f);
+        rect window_inside = rect(window_border.x+1.0f, window_border.y+1.0f, window_border.w-2.0f, window_border.h-2.0f);
+        v4 border_color = v4_full(0.6f);
+
+        v2 icon_pos = v2(window_inside.x + 2.0f, window_inside.y + 4.0f);
+        v2 icon_size = v2_full(window_inside.h-8.0f);
+
         f32 sep = 4.0f;
+        v2 text_box_pos = v2(icon_pos.x+icon_size.x+sep+1.0f, 1.0f);
         v2 text_box_size = v2((f32)window->width - icon_size.x-sep-2.0f, (f32)window->height-2.0f);
 
-        v2 icon_pos = v2_zero();
-        v2 text_box_pos = v2(icon_size.x+sep+1.0f, 1.0f);
-
-        f32 padding = 4.0f;
-        f32 vert_padding = 2.0f;
         rect text_box = rect_min_dim(text_box_pos, text_box_size);
-        rect text_box_border = rect(text_box.x-1.0f, text_box.y-1.0f, text_box.w+2.0f, text_box.h+2.0f);
         rect text_bounds = rect(text_box.x+padding, text_box.y+vert_padding, text_box.w-padding, text_box.h+vert_padding);
-        TextMetrics metrics =  text_get_metrics(renderer->text_renderer, buffer, text_bounds, caret_idx);
+        TextMetrics metrics = text_get_metrics(renderer->text_renderer, buffer, text_bounds, caret_idx);
 
         f32 scroll = 0.0f;
         if (metrics.text_width < text_bounds.w - padding)
@@ -381,9 +385,9 @@ int main(void)
         metrics.caret_pos.x -= scroll;
         rect cursor = rect(metrics.caret_pos.x, metrics.caret_pos.y+4.0f, 2.0f, font_size+2.0f);
 
+        draw_quad(renderer, window_border, border_color);
+        draw_quad(renderer, window_inside, clear_color);
         draw_texture(renderer, &atlas, 1, icon_pos, icon_size);
-        draw_quad(renderer, text_box_border, color_white());
-        draw_quad(renderer, text_box, clear_color);
 
         if (show_caret)
             draw_quad(renderer, cursor, color_white());

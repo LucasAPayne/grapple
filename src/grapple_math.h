@@ -127,7 +127,7 @@ internal inline f32 lerp_f32(f32 a, f32 b, f32 t)
 
 internal inline v2 v2_full(f32 fill_value)
 {
-    v2 result = {fill_value, fill_value};
+    v2 result = v2(fill_value, fill_value);
     return result;
 }
 
@@ -153,6 +153,12 @@ internal inline v2 v2_add(v2 a, v2 b)
 // NOTE(lucas): v3 operations
 //
 
+internal inline v3 v3_full(f32 fill_value)
+{
+    v3 result = v3(fill_value, fill_value, fill_value);
+    return result;
+}
+
 internal inline v3 v3_zero(void)
 {
     v3 result = v3(0.0f, 0.0f, 0.0f);
@@ -168,6 +174,12 @@ internal inline v3 v3_scale(v3 v, f32 c)
 //
 // NOTE(lucas): v4 operations
 //
+
+internal inline v4 v4_full(f32 fill_value)
+{
+    v4 result = v4(fill_value, fill_value, fill_value, fill_value);
+    return result;
+}
 
 internal inline v4 v4_zero(void)
 {

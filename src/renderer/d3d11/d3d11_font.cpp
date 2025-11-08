@@ -51,7 +51,7 @@ extern "C" TextRenderer* text_renderer_create(void* window_ptr, IDXGISwapChain* 
 
     HR(tr->render_target->CreateSolidColorBrush(D2D1::ColorF(1.0f, 1.0f, 1.0f, 1.0f), &tr->brush));
 
-    tr->font_size = 22.0f;
+    tr->font_size = 18.0f;
     IDWriteFactory* dwrite_factory = NULL;
     HR(DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, __uuidof(IDWriteFactory), (IUnknown**)&dwrite_factory));
     HR(dwrite_factory->CreateTextFormat(L"Segoe UI", NULL, DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL,

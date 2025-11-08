@@ -252,8 +252,8 @@ void window_icon_set_from_memory(Window* window, void* icon)
 
 void window_icon_set_from_resource(int id)
 {
-    global_window_icon = (HICON)LoadImageA(GetModuleHandleA(0), MAKEINTRESOURCEA(id), IMAGE_ICON,
-                                           0, 0, LR_DEFAULTSIZE|LR_SHARED);
+    UINT flags = LR_DEFAULTSIZE|LR_SHARED;
+    global_window_icon = (HICON)LoadImageA(GetModuleHandleA(0), MAKEINTRESOURCEA(id), IMAGE_ICON, 0, 0, flags);
 }
 
 void open_vs_code(char* proj_path)
