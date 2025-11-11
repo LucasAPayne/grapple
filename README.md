@@ -10,7 +10,7 @@ Grapple is a tool for quickly opening VS Code projects using only the keyboard. 
 
 ## Demo
 
-![Demo Video](doc/images/grapple_demo.mp4)
+![Demo Video](doc/images/grapple_demo.gif)
 
 ## Installation
 
