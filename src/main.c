@@ -107,10 +107,9 @@ internal inline b32 has_valid_drive_colon(s8 s)
     return result;
 }
 
-internal inline Project* load_projects(s8 settings_str, u32 num_projects, Arena* arena)
+// TODO(lucas): Detect parse failure and return status
+internal inline void load_projects(Project* projects, s8 settings_str)
 {
-    Project* projects = push_array(arena, num_projects, Project);
-
     s8 line = {0};
     u32 proj_idx = 0;
     b32 parsing_projects = false;
@@ -185,18 +184,20 @@ internal inline Project* load_projects(s8 settings_str, u32 num_projects, Arena*
             process_line = false;
         }
     }
-
-    return projects;
 }
 
 int main(void)
 {
-    int window_width = 800;
-    int window_height = 600;
+    int window_width = 300;
+    int window_height = 40;
     Window* window = window_create("Grapple", window_width, window_height);
+    if (!window)
+        return -1;
+
     Input input = {0};
 
     Arena arena = arena_alloc(MEGABYTES(10));
+    Arena projects_arena = arena_alloc(KILOBYTES(10));
     Arena scratch_arena = arena_alloc(KILOBYTES(4));
 
     Renderer* renderer = renderer_create(window, &arena);
@@ -218,20 +219,8 @@ int main(void)
     size caret_idx = 0;
 
     char* settings_path = "config/grapple.ini";
-    size settings_size = file_get_size(settings_path);
-    s8 settings_str = s8_alloc(&arena, settings_size);
-    settings_str.len = settings_size;
-    void* settings_file = file_open(settings_path, FileMode_Read);
-    if (!settings_file)
-    {
-        // TODO(lucas): Message box
-        return 1;
-    }
-    file_read(settings_file, settings_str.data, settings_size);
-    file_close(settings_file);
-
-    u32 num_projects = get_num_projects(settings_str);
-    Project* projects = load_projects(settings_str, num_projects, &arena);
+    u32 num_projects = 0;
+    Project* projects = 0;
 
     while (window->open)
     {
@@ -242,6 +231,28 @@ int main(void)
             break;
 
         arena_clear(&scratch_arena);
+
+        if (window->woke_this_frame)
+        {
+            arena_clear(&projects_arena);
+            size settings_size = file_get_size(settings_path);
+            s8 settings_str = s8_alloc(&projects_arena, settings_size);
+            settings_str.len = settings_size;
+            void* settings_file = file_open(settings_path, FileMode_Read);
+            if (!settings_file)
+            {
+                // TODO(lucas): Message box
+                return 1;
+            }
+            file_read(settings_file, settings_str.data, settings_size);
+            file_close(settings_file);
+
+            num_projects = get_num_projects(settings_str);
+            projects = push_array(&projects_arena, num_projects, Project);
+            load_projects(projects, settings_str);
+
+            window->woke_this_frame = false;
+        }
 
         /* Input */
         // TODO(lucas): Handle input from the Windows emoji picker
@@ -277,8 +288,11 @@ int main(void)
                     {
                         open_project(project.path, &scratch_arena);
 
-                        // TODO(lucas): Return to system tray
-                        return 0;
+                        // Clear the text box so that when the window is opened again, the old text will be gone.
+                        buffer.len = 0;
+                        caret_idx = 0;
+
+                        window_hide(window);
                     }
                 }
             }
@@ -352,18 +366,23 @@ int main(void)
         v4 clear_color = v4(0.125f, 0.125f, 0.125f, 1.0f);
         renderer_clear(renderer, clear_color);
 
-        v2 window_center = v2((f32)window->width/2.0f, (f32)window->height/2.0f);
-        v2 text_box_size = v2(200.0f, font_size+10.0f);
-        v2 icon_size = v2_full(text_box_size.y);
-
-        v2 text_box_pos = v2(window_center.x - (text_box_size.x - icon_size.x)/2.0f, window_center.y - text_box_size.y/2.0f);
-        v2 icon_pos = v2(text_box_pos.x - icon_size.x - 5.0f, text_box_pos.y);
-
+        // TODO(lucas): Organize this mess into a reasonable style spec
         f32 padding = 4.0f;
+        f32 vert_padding = 5.0f;
+        rect window_border = rect(1.0f, 1.0f, (f32)window->width-2.0f, (f32)window->height-2.0f);
+        rect window_inside = rect(window_border.x+1.0f, window_border.y+1.0f, window_border.w-2.0f, window_border.h-2.0f);
+        v4 border_color = v4_full(0.6f);
+
+        v2 icon_pos = v2(window_inside.x + 2.0f, window_inside.y + 4.0f);
+        v2 icon_size = v2_full(window_inside.h-8.0f);
+
+        f32 sep = 4.0f;
+        v2 text_box_pos = v2(icon_pos.x+icon_size.x+sep+1.0f, 1.0f);
+        v2 text_box_size = v2((f32)window->width - icon_size.x-sep-2.0f, (f32)window->height-2.0f);
+
         rect text_box = rect_min_dim(text_box_pos, text_box_size);
-        rect text_box_border = rect(text_box.x-1.0f, text_box.y-1.0f, text_box.w+2.0f, text_box.h+2.0f);
-        rect text_bounds = rect(text_box.x+padding, text_box.y, text_box.w-padding, text_box.h);
-        TextMetrics metrics =  text_get_metrics(renderer->text_renderer, buffer, text_bounds, caret_idx);
+        rect text_bounds = rect(text_box.x+padding, text_box.y+vert_padding, text_box.w-padding, text_box.h+vert_padding);
+        TextMetrics metrics = text_get_metrics(renderer->text_renderer, buffer, text_bounds, caret_idx);
 
         f32 scroll = 0.0f;
         if (metrics.text_width < text_bounds.w - padding)
@@ -374,9 +393,9 @@ int main(void)
         metrics.caret_pos.x -= scroll;
         rect cursor = rect(metrics.caret_pos.x, metrics.caret_pos.y+4.0f, 2.0f, font_size+2.0f);
 
+        draw_quad(renderer, window_border, border_color);
+        draw_quad(renderer, window_inside, clear_color);
         draw_texture(renderer, &atlas, 1, icon_pos, icon_size);
-        draw_quad(renderer, text_box_border, color_white());
-        draw_quad(renderer, text_box, clear_color);
 
         if (show_caret)
             draw_quad(renderer, cursor, color_white());

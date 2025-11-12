@@ -5,7 +5,17 @@
 #include <windows.h>
 #include <shellapi.h>
 
+#define WM_TRAYICON (WM_USER + 1)
+#define TRAY_MENU_SHOW 1001
+#define TRAY_MENU_EXIT 1002
+
+#define HK_OPEN 1
+
 global HICON global_window_icon;
+
+global NOTIFYICONDATAA global_nid;
+global HMENU global_tray_menu;
+global b32 global_restoring; // Guards against flicker when restoring window
 
 internal inline i64 win32_get_ticks(void)
 {
@@ -34,9 +44,47 @@ f32 get_frame_seconds(Window* window)
     return seconds_elapsed;
 }
 
+internal void window_move_to_current_monitor(Window* window)
+{
+    HWND focused_window = GetForegroundWindow();
+    HMONITOR monitor = MonitorFromWindow(focused_window, MONITOR_DEFAULTTONEAREST);
+
+    MONITORINFO mi = {0};
+    mi.cbSize = sizeof(MONITORINFO);
+    if (GetMonitorInfoA(monitor, &mi))
+    {
+        RECT rc = mi.rcMonitor;
+        int monitor_width = rc.right - rc.left;
+        int monitor_height = rc.bottom - rc.top;
+
+        // Monitors exist in one coordinate space, so add the monitor's x-coordinate
+        int x = rc.left + (monitor_width - window->width) / 2;
+        int y = (monitor_height - window->height) / 4;
+
+        SetWindowPos(window->ptr, HWND_TOP, x, y, 0, 0, SWP_NOSIZE | SWP_SHOWWINDOW);
+    }
+}
+
+void window_show(Window* window)
+{
+    // Show the window, put it on top, and direct keyboard input to it
+    global_restoring = true;
+    window_move_to_current_monitor(window);
+    SetForegroundWindow(window->ptr);
+    global_restoring = false;
+    window->woke_this_frame = true;
+}
+
+void window_hide(Window* window)
+{
+    HWND hwnd = window->ptr;
+    ShowWindow(hwnd, SW_HIDE);
+}
+
 internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
     LRESULT result = 0;
+    Window* window = (Window*)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
 
     switch(msg)
     {
@@ -45,7 +93,6 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
         */
         case WM_CLOSE:
         {
-            Window* window = (Window*)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
             if (window)
                 window->open = false;
 
@@ -57,9 +104,14 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
         */
         case WM_DESTROY:
         {
-            Window* window = (Window*)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
             if (window)
                 window->open = false;
+
+            // Clean up system tray resources
+            UnregisterHotKey(hwnd, HK_OPEN);
+            Shell_NotifyIconA(NIM_DELETE, &global_nid);
+            if (global_tray_menu)
+                DestroyMenu(global_tray_menu);
 
             PostQuitMessage(0);
         } break;
@@ -68,6 +120,43 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
         {
             // Don't chime when Alt+Enter is pressed
             result = MAKELRESULT(0, MNC_CLOSE);
+        } break;
+
+        case WM_TRAYICON:
+        {
+            if (LOWORD(lparam) == WM_LBUTTONDBLCLK)
+                window_show(window);
+            else if (LOWORD(lparam) == WM_RBUTTONUP)
+            {
+                POINT pt;
+                GetCursorPos(&pt);
+                SetForegroundWindow(hwnd);
+                TrackPopupMenu(global_tray_menu, TPM_BOTTOMALIGN | TPM_LEFTALIGN, pt.x, pt.y, 0, hwnd, NULL);
+                PostMessageA(hwnd, WM_NULL, 0, 0);
+            }
+        } break;
+
+        case WM_COMMAND:
+        {
+            if (LOWORD(wparam) == TRAY_MENU_SHOW)
+                window_show(window);
+            else if (LOWORD(wparam) == TRAY_MENU_EXIT)
+                DestroyWindow(hwnd);
+        } break;
+
+        case WM_HOTKEY:
+        {
+            if (wparam == HK_OPEN)
+                window_show(window);
+        }
+
+        case WM_KILLFOCUS:
+        case WM_ACTIVATE:
+        {
+            // Open the window hidden, and hide it when it loses focus.
+            // NOTE(lucas): Calling window_hide here doesn't work, so call ShowWindow expclicitly
+            if (LOWORD(lparam) == WA_INACTIVE && !global_restoring)
+                ShowWindow(hwnd, SW_HIDE);
         } break;
 
         /*
@@ -85,6 +174,13 @@ internal LRESULT CALLBACK win32_main_window_callback(HWND hwnd, UINT msg, WPARAM
 
 Window* window_create(const char* title, int width, int height)
 {
+    char* wnd_class = "GrappleWindow";
+
+    // If an instance of the app is already running, just return a null pointer.
+    HWND hwnd_prev = FindWindowA(wnd_class, NULL);
+    if (hwnd_prev)
+        return NULL;
+
     Window* window = (Window*)VirtualAllocEx(GetCurrentProcess(), NULL, sizeof(Window), MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
 
     window->width = width;
@@ -101,24 +197,17 @@ Window* window_create(const char* title, int width, int height)
     window_class.style = CS_HREDRAW | CS_VREDRAW | CS_DBLCLKS;
     window_class.lpfnWndProc = &win32_main_window_callback;
     window_class.hInstance = instance;
-    window_class.lpszClassName = "GrappleWindow";
+    window_class.lpszClassName = wnd_class;
     window_class.hCursor = LoadCursorA(NULL, IDC_ARROW);
     window_class.hIcon = LoadIconA(0, IDI_APPLICATION);
 
     if (!RegisterClassExA(&window_class))
         win32_error_callback();
 
-    RECT initial_window_rect = {0, 0, width, height};
-    if (!AdjustWindowRectEx(&initial_window_rect, WS_OVERLAPPEDWINDOW, FALSE, WS_EX_OVERLAPPEDWINDOW))
-        win32_error_callback();
-
-    LONG initial_window_width = initial_window_rect.right - initial_window_rect.left;
-    LONG initial_window_height = initial_window_rect.bottom - initial_window_rect.top;
-
-    HWND hwnd = CreateWindowExA(
-        WS_EX_OVERLAPPEDWINDOW, window_class.lpszClassName, title, WS_OVERLAPPEDWINDOW | WS_VISIBLE,
-        CW_USEDEFAULT, CW_USEDEFAULT, initial_window_width,  initial_window_height, 0, 0, instance, 0
-    );
+    // Make the window render on top of everything (topmost) and not appear in the taskbar (toolwindow)
+    DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW;
+    HWND hwnd = CreateWindowExA(ex_style, window_class.lpszClassName, title, WS_VISIBLE | WS_POPUP,
+        0, 0, width, height, 0, 0, instance, 0);
 
     if(!hwnd)
         win32_error_callback();
@@ -128,6 +217,23 @@ Window* window_create(const char* title, int width, int height)
 
     // Associate window data with the window ptr
     SetWindowLongPtrA(hwnd, GWLP_USERDATA, (LONG_PTR)window);
+
+    // Set up system tray icon and pop-up menu
+    global_nid.cbSize = sizeof(NOTIFYICONDATAA);
+    global_nid.hWnd = hwnd;
+    global_nid.uID = 1;
+    global_nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
+    global_nid.uCallbackMessage = WM_TRAYICON;
+    global_nid.hIcon = LoadIconA(NULL, IDI_APPLICATION);
+    lstrcpyA(global_nid.szTip, "Grapple");
+
+    Shell_NotifyIconA(NIM_ADD, &global_nid);
+
+    global_tray_menu =  CreatePopupMenu();
+    AppendMenuA(global_tray_menu, MF_STRING, TRAY_MENU_SHOW, "Show");
+    AppendMenuA(global_tray_menu, MF_STRING, TRAY_MENU_EXIT, "Exit");
+
+    RegisterHotKey(hwnd, HK_OPEN, MOD_CONTROL | MOD_SHIFT, ' ');
 
     return window;
 }
@@ -147,8 +253,8 @@ void window_icon_set_from_memory(Window* window, void* icon)
 
 void window_icon_set_from_resource(int id)
 {
-    global_window_icon = (HICON)LoadImageA(GetModuleHandleA(0), MAKEINTRESOURCEA(id), IMAGE_ICON,
-                                           0, 0, LR_DEFAULTSIZE|LR_SHARED);
+    UINT flags = LR_DEFAULTSIZE|LR_SHARED;
+    global_window_icon = (HICON)LoadImageA(GetModuleHandleA(0), MAKEINTRESOURCEA(id), IMAGE_ICON, 0, 0, flags);
 }
 
 void open_vs_code(char* proj_path)
