@@ -107,10 +107,9 @@ internal inline b32 has_valid_drive_colon(s8 s)
     return result;
 }
 
-internal inline Project* load_projects(s8 settings_str, u32 num_projects, Arena* arena)
+// TODO(lucas): Detect parse failure and return status
+internal inline void load_projects(Project* projects, s8 settings_str)
 {
-    Project* projects = push_array(arena, num_projects, Project);
-
     s8 line = {0};
     u32 proj_idx = 0;
     b32 parsing_projects = false;
@@ -185,8 +184,6 @@ internal inline Project* load_projects(s8 settings_str, u32 num_projects, Arena*
             process_line = false;
         }
     }
-
-    return projects;
 }
 
 int main(void)
@@ -200,6 +197,7 @@ int main(void)
     Input input = {0};
 
     Arena arena = arena_alloc(MEGABYTES(10));
+    Arena projects_arena = arena_alloc(KILOBYTES(10));
     Arena scratch_arena = arena_alloc(KILOBYTES(4));
 
     Renderer* renderer = renderer_create(window, &arena);
@@ -221,20 +219,8 @@ int main(void)
     size caret_idx = 0;
 
     char* settings_path = "config/grapple.ini";
-    size settings_size = file_get_size(settings_path);
-    s8 settings_str = s8_alloc(&arena, settings_size);
-    settings_str.len = settings_size;
-    void* settings_file = file_open(settings_path, FileMode_Read);
-    if (!settings_file)
-    {
-        // TODO(lucas): Message box
-        return 1;
-    }
-    file_read(settings_file, settings_str.data, settings_size);
-    file_close(settings_file);
-
-    u32 num_projects = get_num_projects(settings_str);
-    Project* projects = load_projects(settings_str, num_projects, &arena);
+    u32 num_projects = 0;
+    Project* projects = 0;
 
     while (window->open)
     {
@@ -245,6 +231,28 @@ int main(void)
             break;
 
         arena_clear(&scratch_arena);
+
+        if (window->woke_this_frame)
+        {
+            arena_clear(&projects_arena);
+            size settings_size = file_get_size(settings_path);
+            s8 settings_str = s8_alloc(&projects_arena, settings_size);
+            settings_str.len = settings_size;
+            void* settings_file = file_open(settings_path, FileMode_Read);
+            if (!settings_file)
+            {
+                // TODO(lucas): Message box
+                return 1;
+            }
+            file_read(settings_file, settings_str.data, settings_size);
+            file_close(settings_file);
+
+            num_projects = get_num_projects(settings_str);
+            projects = push_array(&projects_arena, num_projects, Project);
+            load_projects(projects, settings_str);
+
+            window->woke_this_frame = false;
+        }
 
         /* Input */
         // TODO(lucas): Handle input from the Windows emoji picker

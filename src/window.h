@@ -7,6 +7,7 @@ typedef struct
     int width;
     int height;
     b32 open;
+    b32 woke_this_frame;
 
     // Timing information used to calculate delta seconds for each frame.
     // Not intended to be accessed

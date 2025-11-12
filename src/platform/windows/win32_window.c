@@ -72,6 +72,7 @@ void window_show(Window* window)
     window_move_to_current_monitor(window);
     SetForegroundWindow(window->ptr);
     global_restoring = false;
+    window->woke_this_frame = true;
 }
 
 void window_hide(Window* window)
