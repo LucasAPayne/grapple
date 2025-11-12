@@ -1,5 +1,6 @@
 .vs
 .vscode
+**/*.exe
 **/*.rdbg
 **/*.xcf
 build

@@ -20,7 +20,7 @@ Grapple requires at least Windows 10 and a device compatible with Direct3D 11. C
 
 ### Building Grapple
 
-Clone the repository or download a ZIP archive of it and extract it. Navigate to the `grapple` folder and run the `build.bat` script, which will produce `build/grapple.exe`.
+Clone the repository or download a ZIP archive of it and extract it. Navigate to the `grapple` folder and run the `build.bat` script.
 
 ```bat
 git clone https://github.com/LucasAPayne/grapple
@@ -33,7 +33,7 @@ build
 
 ### Setting Grapple as a Startup Process
 
-It is recommended to set `grapple.exe` as a startup process. To do so, right-click this file and select `Create Shortcut`, and place the shortcut in the folder `%userprofile%\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`. The next time your computer is restarted, Grapple should be visible in the system tray, and you should be able to use the keyboard shortcut to bring it to the foreground.
+It is recommended to set `grapple.exe` as a startup process. To do so, first ensure that `grapple.exe` and the `config` folder are located in the same folder. Next, right-click `grapple.exe` and select `Create Shortcut`, and place the shortcut in the folder `%userprofile%\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup`. The next time your computer is restarted, Grapple should be visible in the system tray, and you should be able to use the keyboard shortcut to bring it to the foreground.
 
 ## How to Use Grapple
 
