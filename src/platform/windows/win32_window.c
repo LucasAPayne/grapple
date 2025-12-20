@@ -257,9 +257,92 @@ void window_icon_set_from_resource(int id)
     global_window_icon = (HICON)LoadImageA(GetModuleHandleA(0), MAKEINTRESOURCEA(id), IMAGE_ICON, 0, 0, flags);
 }
 
-void open_vs_code(char* proj_path)
+void open_vs_code(char* proj_path, b32 msvc)
 {
-    HINSTANCE result = ShellExecuteA(NULL, "open", "code", proj_path, proj_path, SW_HIDE);
-    if ((INT_PTR)result <= 32)
-        win32_error_callback();
+    // TODO(lucas): Handle/report errors
+    if (msvc)
+    {
+        char pf86[MAX_PATH];
+        if (GetEnvironmentVariableA("ProgramFiles(x86)", pf86, MAX_PATH))
+        {
+            char vswhere[MAX_PATH];
+            snprintf(vswhere, sizeof(vswhere),
+                "\"%s\\Microsoft Visual Studio\\Installer\\vswhere.exe\" "
+                "-latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath",
+                pf86
+            );
+
+            // NOTE(lucas): Find the location of vcvarsall.bat by running vswhere and capturing output with a pipe.
+            SECURITY_ATTRIBUTES sa = {sizeof(sa), NULL, TRUE};
+            HANDLE rpipe, wpipe;
+            if (CreatePipe(&rpipe, &wpipe, &sa, 0))
+            {
+                STARTUPINFOA si = {0};
+                si.cb = sizeof(si);
+                si.dwFlags = STARTF_USESTDHANDLES;
+                si.hStdOutput = wpipe;
+                si.hStdError  = wpipe;
+                PROCESS_INFORMATION pi;
+
+                char vswhere_cmd[2048];
+                snprintf(vswhere_cmd, sizeof(vswhere_cmd), "cmd.exe /c %s", vswhere);
+
+                BOOL ok = CreateProcessA(NULL, vswhere_cmd, NULL, NULL, TRUE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+                CloseHandle(wpipe);
+                if (!ok)
+                    CloseHandle(rpipe);
+
+                DWORD read = 0;
+                DWORD total = 0;
+                char install_path[MAX_PATH];
+                while (ReadFile(rpipe, install_path + total, (DWORD)(sizeof(install_path) - total - 1), &read, NULL) && read)
+                {
+                    total += read;
+                    if (total >= sizeof(install_path) - 1)
+                        break;
+                }
+                install_path[total] = 0;
+
+                CloseHandle(rpipe);
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+
+                // NOTE(lucas): Make sure there is no newline in the install path
+                for (char* p = install_path; *p; ++p)
+                {
+                    if (*p == '\r' || *p == '\n')
+                    {
+                        *p = 0;
+                        break;
+                    }
+                }
+
+                char vcvars[MAX_PATH];
+                snprintf(vcvars, sizeof(vcvars), "%s\\VC\\Auxiliary\\Build\\vcvarsall.bat", install_path);
+
+                // TODO(lucas): Create a process for the launcher earlier than this, and instead of using && to launch code,
+                // just make this whole block an optional step depending on the options for Grapple/the project
+                char vcvars_cmd[2048];
+                snprintf(vcvars_cmd, sizeof(vcvars_cmd), "cmd.exe /k \"call \"%s\" x64 && code \"%s\"\"",
+                    vcvars, proj_path);
+
+                si = (STARTUPINFO){0};
+                pi = (PROCESS_INFORMATION){0};
+
+                if (!CreateProcessA(NULL, vcvars_cmd, NULL, NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
+                {
+                    // TODO(lucas): Error launching Code
+                }
+
+                CloseHandle(pi.hProcess);
+                CloseHandle(pi.hThread);
+            }
+        }
+    }
+    else
+    {
+        HINSTANCE result = ShellExecuteA(NULL, "open", "code", proj_path, proj_path, SW_HIDE);
+        if ((INT_PTR)result <= 32)
+            win32_error_callback();
+    }
 }

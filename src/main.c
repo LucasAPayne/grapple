@@ -14,10 +14,10 @@ typedef struct
     s8 path;
 } Project;
 
-internal inline void open_project(s8 proj_path, Arena* arena)
+internal inline void open_project(s8 proj_path, b32 msvc, Arena* arena)
 {
     char* dir = s8_get_char(arena, proj_path);
-    open_vs_code(dir);
+    open_vs_code(dir, msvc);
     arena_pop(arena, proj_path.len+1);
 }
 
@@ -108,8 +108,10 @@ internal inline b32 has_valid_drive_colon(s8 s)
 }
 
 // TODO(lucas): Detect parse failure and return status
-internal inline void load_projects(Project* projects, s8 settings_str)
+internal inline b32 load_projects(Project* projects, s8 settings_str)
 {
+    b32 msvc = false;
+
     s8 line = {0};
     u32 proj_idx = 0;
     b32 parsing_projects = false;
@@ -177,6 +179,8 @@ internal inline void load_projects(Project* projects, s8 settings_str)
             {
                 if (s8_eq(line, s8("[Projects]")))
                     parsing_projects = true;
+                else if (s8_eq(line, s8("msvc = true")))
+                    msvc = true;
             }
             line_start = i+1;
 
@@ -184,6 +188,8 @@ internal inline void load_projects(Project* projects, s8 settings_str)
             process_line = false;
         }
     }
+
+    return msvc;
 }
 
 int main(void)
@@ -218,9 +224,10 @@ int main(void)
     b32 show_caret = true;
     size caret_idx = 0;
 
-    char* settings_path = "config/grapple.ini";
+    char* settings_path = "config/test.ini";
     u32 num_projects = 0;
     Project* projects = 0;
+    b32 msvc = false;
 
     while (window->open)
     {
@@ -249,7 +256,7 @@ int main(void)
 
             num_projects = get_num_projects(settings_str);
             projects = push_array(&projects_arena, num_projects, Project);
-            load_projects(projects, settings_str);
+            msvc = load_projects(projects, settings_str);
 
             window->woke_this_frame = false;
         }
@@ -286,7 +293,7 @@ int main(void)
 
                     if (s8_eq(buffer, project.name) || s8_eq(buffer, project.path))
                     {
-                        open_project(project.path, &scratch_arena);
+                        open_project(project.path, msvc, &scratch_arena);
 
                         // Clear the text box so that when the window is opened again, the old text will be gone.
                         buffer.len = 0;

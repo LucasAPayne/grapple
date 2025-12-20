@@ -26,4 +26,4 @@ void* window_icon_load_from_file(const char* filename);
 void window_icon_set_from_memory(Window* window, void* icon);
 void window_icon_set_from_resource(int id);
 
-void open_vs_code(char* proj_path);
+void open_vs_code(char* proj_path, b32 vs_code);
