@@ -35,7 +35,7 @@ internal inline u32 get_num_projects(s8 settings_str)
     for (size i = 0; i < settings_str.len; ++i)
     {
         u8 c = settings_str.data[i];
-        if (c == '\n' && !comment)
+        if ((c == '\n' || i == settings_str.len-1) && !comment)
         {
             process_line = true;
             line_end = i;
@@ -122,7 +122,7 @@ internal inline b32 load_projects(Project* projects, s8 settings_str)
     for (size i = 0; i < settings_str.len; ++i)
     {
         u8 c = settings_str.data[i];
-        if (c == '\n' && !comment)
+        if ((c == '\n' || i == settings_str.len-1))
         {
             process_line = true;
             line_end = i;
@@ -224,7 +224,7 @@ int main(void)
     b32 show_caret = true;
     size caret_idx = 0;
 
-    char* settings_path = "config/test.ini";
+    char* settings_path = "config/grapple.ini";
     u32 num_projects = 0;
     Project* projects = 0;
     b32 msvc = false;
@@ -248,7 +248,9 @@ int main(void)
             void* settings_file = file_open(settings_path, FileMode_Read);
             if (!settings_file)
             {
-                // TODO(lucas): Message box
+                char buf[256];
+                snprintf(buf, sizeof(buf), "Settings file \"%s\" could not be opened", settings_path);
+                MessageBoxA(0, buf, "Error", MB_OK);
                 return 1;
             }
             file_read(settings_file, settings_str.data, settings_size);
