@@ -224,7 +224,7 @@ int main(void)
     b32 show_caret = true;
     size caret_idx = 0;
 
-    char* settings_path = "config/grapple.ini";
+    char* settings_path = "config/test.ini";
     u32 num_projects = 0;
     Project* projects = 0;
     b32 msvc = false;
@@ -300,6 +300,7 @@ int main(void)
                         // Clear the text box so that when the window is opened again, the old text will be gone.
                         buffer.len = 0;
                         caret_idx = 0;
+                        chars = 0;
 
                         window_hide(window);
                     }
